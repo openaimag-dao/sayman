@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 
 // ─────────────────────────────────────────────
 //  САЙМАН — интернет-магазин (прототип)
@@ -110,8 +110,16 @@ const THEMES = {
   },
 };
 
-const FREE_DELIVERY = 10000;
-const DELIVERY_FEE = 700;
+const DEFAULT_SETTINGS = { delivery_fee: 700, free_from: 10000, min_order: 0, hours: "08:00 – 22:00", shop_open: true };
+const beep = () => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = 880; g.gain.value = 0.12;
+    o.start(); o.stop(ctx.currentTime + 0.3);
+  } catch {}
+};
 const WA_PHONE = "77755683313"; // WhatsApp магазина: +7 775 568 33 13
 
 // ── Общая база данных (Supabase) ──
@@ -189,6 +197,14 @@ export default function SaymanStore() {
   const [pickState, setPickState] = useState({});
   const [myOrders, setMyOrders] = useState([]);
   const [myLoading, setMyLoading] = useState(false);
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [orderFilter, setOrderFilter] = useState("all");
+  const [orderSearch, setOrderSearch] = useState("");
+  const [prodSearch, setProdSearch] = useState("");
+  const [pinsDraft, setPinsDraft] = useState({ a: "", p: "", c: "" });
+  const prevNewCount = useRef(0);
+  const FREE_DELIVERY = settings.free_from;
+  const DELIVERY_FEE = settings.delivery_fee;
 
   // Загрузка сохранённых данных (заказы + данные клиента) при открытии
   useEffect(() => {
@@ -196,6 +212,10 @@ export default function SaymanStore() {
       try {
         const saved = await appStorage.get("sayman-orders");
         if (saved?.value) setOrders(JSON.parse(saved.value));
+      } catch {}
+      try {
+        const st = await sGet("shop_settings?select=*&id=eq.1");
+        if (st[0]) setSettings({ ...DEFAULT_SETTINGS, ...st[0] });
       } catch {}
       try {
         const rows = await sGet("products?select=*&order=pos.asc");
@@ -217,6 +237,17 @@ export default function SaymanStore() {
   const persistOrders = async (list) => {
     try { await appStorage.set("sayman-orders", JSON.stringify(list.slice(0, 50))); } catch {}
   };
+
+  useEffect(() => {
+    if (!staffAuth || screen !== "admin") return;
+    const t = setInterval(() => { loadAdminOrders(staffPin).catch(() => {}); }, 30000);
+    return () => clearInterval(t);
+  }, [staffAuth, screen, staffPin]);
+  useEffect(() => {
+    const n = adminOrders.filter((o) => o.status === "new").length;
+    if (staffAuth && n > prevNewCount.current) beep();
+    prevNewCount.current = n;
+  }, [adminOrders, staffAuth]);
 
   const dbFail = () => alert("Не удалось сохранить в базе. Проверьте интернет и попробуйте ещё раз.");
   const updateProduct = (sec, id, patch) => setProductsData((prev) => {
@@ -343,6 +374,7 @@ export default function SaymanStore() {
   const add = (id, d) => setCart((c) => ({ ...c, [id]: Math.max(0, (c[id] || 0) + d) }));
 
   const submitOrder = () => {
+    if (settings.min_order > 0 && cartTotal < settings.min_order) return alert("Минимальная сумма заказа — " + fmt(settings.min_order));
     if (!order.name.trim() || order.phone.trim().length < 10) return alert("Укажите имя и номер телефона");
     if (order.type === "delivery" && !order.address.trim()) return alert("Укажите адрес доставки");
     const num = "SM-" + Math.floor(1000 + Math.random() * 9000);
@@ -599,7 +631,7 @@ export default function SaymanStore() {
           </div>
         </div>
         <div style={{ ...S.wrap, display: "flex", gap: 6, paddingBottom: 12 }}>
-          {[["orders", "📦 Заказы"], ["products", "🏷️ Товары и цены"], ["stats", "📊 Аналитика"]].map(([k, label]) => (
+          {[["orders", "📦 Заказы"], ["products", "🏷️ Товары"], ["stats", "📊 Аналитика"], ["clients", "👥 Клиенты"], ["settings", "⚙️ Настройки"]].map(([k, label]) => (
             <button key={k} onClick={() => setAdminTab(k)}
               style={{ background: adminTab === k ? "#fff" : "rgba(255,255,255,.12)", color: adminTab === k ? "#1B1B18" : "#fff", border: "none", borderRadius: 10, padding: "9px 16px", fontWeight: 800, fontSize: 13.5 }}>
               {label}
@@ -608,6 +640,99 @@ export default function SaymanStore() {
         </div>
       </header>
     );
+
+    // ── вкладка Клиенты ──
+    if (adminTab === "clients") {
+      const agg = {};
+      adminOrders.forEach((o) => {
+        if (!o.phone || o.status === "cancelled") return;
+        const k = o.phone;
+        agg[k] = agg[k] || { phone: k, name: o.name, n: 0, sum: 0, last: "" };
+        agg[k].n++; agg[k].sum += o.total;
+        if (!agg[k].last) agg[k].last = o.date + " " + o.time;
+        if (o.name) agg[k].name = agg[k].name || o.name;
+      });
+      const clients = Object.values(agg).sort((a, b) => b.sum - a.sum);
+      return (
+        <div style={S.page}>
+          <style>{FONTS}</style>
+          {adminHeader}
+          <div style={{ ...S.wrap, maxWidth: 680, paddingTop: 20, paddingBottom: 60 }}>
+            <div style={{ fontSize: 13.5, color: "#888", marginBottom: 14 }}>
+              База собирается автоматически из заказов. Постоянные клиенты сверху — им можно предложить скидку или сообщить об акции.
+            </div>
+            {clients.length === 0 && (
+              <div style={{ textAlign: "center", padding: 50, color: "#888", background: "#fff", borderRadius: 16 }}>👥 Клиенты появятся после первых заказов</div>
+            )}
+            {clients.map((c) => (
+              <div key={c.phone} style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", marginBottom: 8, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 150px" }}>
+                  <div style={{ fontWeight: 800, fontSize: 15 }}>{c.name || "Без имени"} {c.n > 1 && <span style={{ background: "#E7F4EC", color: "#1E7A46", borderRadius: 99, fontSize: 11, fontWeight: 800, padding: "2px 8px", marginLeft: 6 }}>постоянный</span>}</div>
+                  <div style={{ fontSize: 13, color: "#888", marginTop: 2 }}>{c.phone} · последний: {c.last}</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontWeight: 800 }}>{fmt(c.sum)}</div>
+                  <div style={{ fontSize: 12.5, color: "#888" }}>{c.n} заказ(ов)</div>
+                </div>
+                <a href={"https://wa.me/" + String(c.phone).replace(/\D/g, "")} target="_blank" rel="noreferrer"
+                  style={{ background: "#25D366", color: "#fff", borderRadius: 10, padding: "9px 12px", fontSize: 14, textDecoration: "none", fontWeight: 800 }}>💬</a>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ── вкладка Настройки ──
+    if (adminTab === "settings") {
+      const inp = { padding: "11px 13px", borderRadius: 12, border: "1.5px solid #ddd", fontSize: 15, background: "#fff", width: "100%", marginTop: 6 };
+      const lbl = { fontWeight: 700, fontSize: 13.5, display: "block", marginTop: 14 };
+      const saveSettings = () => {
+        rpc("admin_set_settings", { _pin: staffPin, _s: settings }).then(() => alert("Настройки сохранены — уже действуют для всех клиентов")).catch(dbFail);
+      };
+      const savePins = () => {
+        if (!pinsDraft.a && !pinsDraft.p && !pinsDraft.c) return alert("Введите хотя бы один новый PIN");
+        rpc("admin_set_pins", { _pin: staffPin, _admin: pinsDraft.a, _picker: pinsDraft.p, _courier: pinsDraft.c })
+          .then(() => { alert("PIN-коды обновлены. Запишите их! При следующем входе действуют новые."); if (pinsDraft.a) setStaffPin(pinsDraft.a); setPinsDraft({ a: "", p: "", c: "" }); })
+          .catch(dbFail);
+      };
+      return (
+        <div style={S.page}>
+          <style>{FONTS}</style>
+          {adminHeader}
+          <div style={{ ...S.wrap, maxWidth: 560, paddingTop: 20, paddingBottom: 60 }}>
+            <div style={{ background: "#fff", borderRadius: 16, padding: 18 }}>
+              <div style={{ fontWeight: 800, fontSize: 16 }}>Доставка и режим работы</div>
+              <label style={lbl}>Стоимость доставки, ₸</label>
+              <input style={inp} type="number" value={settings.delivery_fee} onChange={(e) => setSettings({ ...settings, delivery_fee: Number(e.target.value) || 0 })} />
+              <label style={lbl}>Бесплатная доставка от, ₸</label>
+              <input style={inp} type="number" value={settings.free_from} onChange={(e) => setSettings({ ...settings, free_from: Number(e.target.value) || 0 })} />
+              <label style={lbl}>Минимальная сумма заказа, ₸ (0 — без ограничения)</label>
+              <input style={inp} type="number" value={settings.min_order} onChange={(e) => setSettings({ ...settings, min_order: Number(e.target.value) || 0 })} />
+              <label style={lbl}>Часы работы (текст)</label>
+              <input style={inp} value={settings.hours} onChange={(e) => setSettings({ ...settings, hours: e.target.value })} />
+              <label style={{ ...lbl, display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                <input type="checkbox" checked={settings.shop_open} onChange={(e) => setSettings({ ...settings, shop_open: e.target.checked })} style={{ width: 20, height: 20, accentColor: "#1E7A46" }} />
+                Магазин открыт (снимите на ночь/выходной — клиенты увидят предупреждение)
+              </label>
+              <button onClick={saveSettings} style={{ ...S.btn("#1E7A46"), width: "100%", marginTop: 16, padding: 14 }}>Сохранить настройки</button>
+            </div>
+
+            <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginTop: 16 }}>
+              <div style={{ fontWeight: 800, fontSize: 16 }}>PIN-коды персонала</div>
+              <p style={{ fontSize: 12.5, color: "#999", marginTop: 4 }}>Заполните только те, что хотите сменить. Пустое поле — PIN остаётся прежним.</p>
+              <label style={lbl}>Новый PIN админа</label>
+              <input style={inp} value={pinsDraft.a} onChange={(e) => setPinsDraft({ ...pinsDraft, a: e.target.value.trim() })} placeholder="например 4815" />
+              <label style={lbl}>Новый PIN сборщика</label>
+              <input style={inp} value={pinsDraft.p} onChange={(e) => setPinsDraft({ ...pinsDraft, p: e.target.value.trim() })} placeholder="например 1623" />
+              <label style={lbl}>Новый PIN курьера</label>
+              <input style={inp} value={pinsDraft.c} onChange={(e) => setPinsDraft({ ...pinsDraft, c: e.target.value.trim() })} placeholder="например 4248" />
+              <button onClick={savePins} style={{ ...S.btn("#1B1B18"), width: "100%", marginTop: 16, padding: 14 }}>Сменить PIN-коды</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     // ── вкладка Аналитика ──
     if (adminTab === "stats") {
@@ -720,7 +845,11 @@ export default function SaymanStore() {
               💡 Цены сохраняются автоматически при выходе из поля. Нажмите 📷 чтобы загрузить фото товара с устройства (сожмётся автоматически). «Стар. цена» — если заполнена, товар показывается как акция со скидкой.
             </div>
 
-            {productsData[adminSection].map((p) => (
+            <input value={prodSearch} onChange={(e) => setProdSearch(e.target.value)} placeholder="Поиск товара по названию или категории…"
+              style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1.5px solid #e2e0da", fontSize: 14.5, background: "#fff", marginBottom: 12 }} />
+            {productsData[adminSection].filter((p) =>
+              (p.name + " " + p.cat).toLowerCase().includes(prodSearch.toLowerCase().trim())
+            ).map((p) => (
               <div key={p.id} style={{ background: "#fff", borderRadius: 14, padding: "10px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", opacity: p.available === false ? 0.55 : 1 }}>
                 <label style={{ width: 52, height: 52, borderRadius: 10, background: secTheme.accentSoft, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, cursor: "pointer", overflow: "hidden", flexShrink: 0 }} title="Нажмите, чтобы загрузить фото">
                   {p.img ? <img src={p.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : p.emoji}
@@ -800,19 +929,33 @@ export default function SaymanStore() {
             </div>
           );
         })()}
-        <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
-          {Object.entries(STATUS).map(([k, s]) => (
-            <div key={k} style={{ background: "#fff", borderRadius: 12, padding: "10px 16px", fontSize: 14, fontWeight: 700 }}>
-              <span style={{ color: s.color }}>●</span> {s.label}: {adminOrders.filter((o) => o.status === k).length}
-            </div>
-          ))}
+        <input value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} placeholder="Поиск: номер заказа, телефон или имя…"
+          style={{ width: "100%", padding: "13px 15px", borderRadius: 12, border: "1.5px solid #e2e0da", fontSize: 14.5, background: "#fff", marginBottom: 12 }} />
+        <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+          <button onClick={() => setOrderFilter("all")}
+            style={{ background: orderFilter === "all" ? "#1B1B18" : "#fff", color: orderFilter === "all" ? "#fff" : "#444", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, fontWeight: 700 }}>
+            Все: {adminOrders.length}
+          </button>
+          {Object.entries(STATUS).filter(([k]) => k !== "work").map(([k, s]) => {
+            const n = adminOrders.filter((o) => o.status === k).length;
+            if (!n && orderFilter !== k) return null;
+            return (
+              <button key={k} onClick={() => setOrderFilter(orderFilter === k ? "all" : k)}
+                style={{ background: orderFilter === k ? s.color : "#fff", color: orderFilter === k ? "#fff" : "#444", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, fontWeight: 700 }}>
+                <span style={{ color: orderFilter === k ? "#fff" : s.color }}>●</span> {s.label}: {n}
+              </button>
+            );
+          })}
         </div>
         {adminOrders.length === 0 ? (
           <div style={{ textAlign: "center", padding: 60, color: "#888", background: "#fff", borderRadius: 16 }}>
             <div style={{ fontSize: 40 }}>📭</div>
             <p style={{ marginTop: 10 }}>Заказов пока нет. Как только клиент оформит заказ на сайте — он появится здесь.</p>
           </div>
-        ) : adminOrders.map((o) => (
+        ) : adminOrders.filter((o) =>
+          (orderFilter === "all" || o.status === orderFilter) &&
+          ((o.num || "") + " " + (o.phone || "") + " " + (o.name || "")).toLowerCase().includes(orderSearch.toLowerCase().trim())
+        ).map((o) => (
           <div key={o.id} style={{ background: "#fff", borderRadius: 16, padding: 18, marginBottom: 14, animation: "fadeUp .3s ease" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
               <div>
@@ -1003,7 +1146,7 @@ export default function SaymanStore() {
             <div style={{ fontFamily: "'Unbounded'", fontWeight: 900, fontSize: 22, letterSpacing: 1 }}>
               САЙМАН<span style={{ color: theme.accent }}>.</span>
             </div>
-            <div style={{ fontSize: 11, opacity: 0.65 }}>Шымкент · с 08:00 до 22:00</div>
+            <div style={{ fontSize: 11, opacity: 0.65 }}>Шымкент · {settings.hours}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <a href="tel:+77755683313" style={{ color: "#fff", textDecoration: "none", fontSize: 14, fontWeight: 700, opacity: 0.9 }}>📞 +7 775 568 33 13</a>
@@ -1032,6 +1175,11 @@ export default function SaymanStore() {
           </div>
           <h1 style={{ fontFamily: "'Unbounded'", color: "#fff", fontSize: "clamp(22px, 4vw, 34px)", fontWeight: 700, marginTop: 18 }}>{theme.tagline}</h1>
           <p style={{ color: "rgba(255,255,255,.85)", marginTop: 6, fontSize: 15 }}>Доставка по Шымкенту от 60 минут · бесплатно от {fmt(FREE_DELIVERY)}</p>
+          {!settings.shop_open && (
+            <div style={{ background: "rgba(0,0,0,.3)", color: "#fff", borderRadius: 12, padding: "10px 14px", marginTop: 12, fontSize: 14, fontWeight: 700 }}>
+              🌙 Магазин сейчас закрыт ({settings.hours}). Заказ можно оформить — соберём в рабочее время.
+            </div>
+          )}
         </div>
       </div>
 
@@ -1216,7 +1364,7 @@ export default function SaymanStore() {
           </div>
           <div>
             📍 г. Шымкент, ул. Байтерекова, 9а<br />
-            🕗 Ежедневно 08:00 – 22:00<br />
+            🕗 Ежедневно {settings.hours}<br />
             📞 +7 775 568 33 13
           </div>
           <button onClick={() => setPrivacyOpen(true)}
