@@ -114,6 +114,17 @@ const FREE_DELIVERY = 10000;
 const DELIVERY_FEE = 700;
 const WA_PHONE = "77755683313"; // WhatsApp магазина: +7 775 568 33 13
 
+// ── Общая база данных (Supabase) ──
+const SUPA_URL = "https://zbnlbxsoxdmmhvmdargy.supabase.co";
+const SUPA_KEY = "sb_publishable_V7hiiZLeL5fEEowwmgSfTQ_NdlTbSrl";
+const sHeaders = { apikey: SUPA_KEY, Authorization: "Bearer " + SUPA_KEY, "Content-Type": "application/json" };
+const sGet = (path) => fetch(SUPA_URL + "/rest/v1/" + path, { headers: sHeaders }).then((r) => { if (!r.ok) throw new Error("db"); return r.json(); });
+const sPost = (path, body, extra) => fetch(SUPA_URL + "/rest/v1/" + path, { method: "POST", headers: { ...sHeaders, ...(extra || {}) }, body: JSON.stringify(body) }).then((r) => { if (!r.ok) return r.text().then((t) => { throw new Error(t); }); return r.text().then((t) => (t ? JSON.parse(t) : null)); });
+const rpc = (fn, args) => sPost("rpc/" + fn, args);
+const rowToProduct = (r) => ({ id: r.id, cat: r.cat, name: r.name, unit: r.unit, price: r.price, oldPrice: r.old_price || undefined, hit: r.hit || undefined, img: r.img || undefined, emoji: r.emoji || "🛒" });
+const productToRow = (sec, p) => ({ id: p.id, section: sec, cat: p.cat, name: p.name, unit: p.unit, price: p.price, old_price: p.oldPrice ?? null, hit: !!p.hit, img: p.img ?? null, emoji: p.emoji || "🛒" });
+const mapOrderRow = (r) => ({ ...r, time: new Date(r.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }), date: new Date(r.created_at).toLocaleDateString("ru-RU") });
+
 const fmt = (n) => n.toLocaleString("ru-RU") + " ₸";
 
 const buildWaMsg = (o) => encodeURIComponent(
@@ -131,7 +142,6 @@ const buildWaMsg = (o) => encodeURIComponent(
 const STATUS = { new: { label: "Новый", color: "#C7411A" }, work: { label: "В работе", color: "#C77B12" }, done: { label: "Выполнен", color: "#1E7A46" } };
 const NEXT_STATUS = { new: "work", work: "done", done: "new" };
 
-const ADMIN_PIN = "2026"; // ← PIN-код для входа персонала, поменяйте на свой
 
 export default function SaymanStore() {
   const [mode, setMode] = useState("food");
@@ -151,6 +161,8 @@ export default function SaymanStore() {
   const [adminSection, setAdminSection] = useState("food");
   const [productsData, setProductsData] = useState(DEFAULT_PRODUCTS);
   const [newProd, setNewProd] = useState(null);
+  const [adminOrders, setAdminOrders] = useState([]);
+  const [staffPin, setStaffPin] = useState("");
 
   // Загрузка сохранённых данных (заказы + данные клиента) при открытии
   useEffect(() => {
@@ -160,8 +172,11 @@ export default function SaymanStore() {
         if (saved?.value) setOrders(JSON.parse(saved.value));
       } catch {}
       try {
-        const pr = await appStorage.get("sayman-products");
-        if (pr?.value) setProductsData(JSON.parse(pr.value));
+        const rows = await sGet("products?select=*&order=pos.asc");
+        if (rows.length) setProductsData({
+          food: rows.filter((r) => r.section === "food").map(rowToProduct),
+          build: rows.filter((r) => r.section === "build").map(rowToProduct),
+        });
       } catch {}
       try {
         const cust = await appStorage.get("sayman-customer");
@@ -177,17 +192,36 @@ export default function SaymanStore() {
     try { await appStorage.set("sayman-orders", JSON.stringify(list.slice(0, 50))); } catch {}
   };
 
-  const persistProducts = async (data) => {
-    try { await appStorage.set("sayman-products", JSON.stringify(data)); }
-    catch { alert("Не удалось сохранить каталог. Возможно, загружено слишком много фото — удалите часть."); }
-  };
-  const mutateProducts = (fn) => setProductsData((prev) => { const next = fn(prev); persistProducts(next); return next; });
-  const updateProduct = (sec, id, patch) => mutateProducts((prev) => ({ ...prev, [sec]: prev[sec].map((p) => p.id === id ? { ...p, ...patch } : p) }));
+  const dbFail = () => alert("Не удалось сохранить в базе. Проверьте интернет и попробуйте ещё раз.");
+  const updateProduct = (sec, id, patch) => setProductsData((prev) => {
+    const list = prev[sec].map((p) => (p.id === id ? { ...p, ...patch } : p));
+    const prod = list.find((p) => p.id === id);
+    rpc("admin_upsert_product", { _pin: staffPin, _p: productToRow(sec, prod) }).catch(dbFail);
+    return { ...prev, [sec]: list };
+  });
   const deleteProduct = (sec, id) => {
     if (!window.confirm("Удалить товар из каталога?")) return;
-    mutateProducts((prev) => ({ ...prev, [sec]: prev[sec].filter((p) => p.id !== id) }));
+    rpc("admin_delete_product", { _pin: staffPin, _id: id }).catch(dbFail);
+    setProductsData((prev) => ({ ...prev, [sec]: prev[sec].filter((p) => p.id !== id) }));
   };
-  const addProduct = (sec, prod) => mutateProducts((prev) => ({ ...prev, [sec]: [{ ...prod, id: sec[0] + Date.now() }, ...prev[sec]] }));
+  const addProduct = (sec, prod) => {
+    const full = { ...prod, id: sec[0] + Date.now() };
+    rpc("admin_upsert_product", { _pin: staffPin, _p: productToRow(sec, full) }).catch(dbFail);
+    setProductsData((prev) => ({ ...prev, [sec]: [full, ...prev[sec]] }));
+  };
+  const loadAdminOrders = async (pin) => {
+    const rows = await rpc("admin_get_orders", { _pin: pin });
+    setAdminOrders(rows.map(mapOrderRow));
+  };
+  const tryStaffLogin = async (pin) => {
+    try { await loadAdminOrders(pin); setStaffPin(pin); setStaffAuth(true); setPinInput(""); }
+    catch { setPinInput(""); alert("Неверный PIN-код (или нет связи с базой)"); }
+  };
+  const cycleAdminStatus = (id, cur) => {
+    const next = NEXT_STATUS[cur];
+    rpc("admin_set_status", { _pin: staffPin, _id: id, _status: next }).catch(dbFail);
+    setAdminOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: next } : o)));
+  };
   const uploadPhoto = (sec, id, file) => {
     if (!file) return;
     const reader = new FileReader();
@@ -245,6 +279,11 @@ export default function SaymanStore() {
       persistOrders(next);
       return next;
     });
+    sPost("orders", {
+      num, name: order.name, phone: order.phone, type: order.type,
+      address: order.address, pay: order.pay, comment: order.comment,
+      items: newOrder.items, total: newOrder.total,
+    }, { Prefer: "return=minimal" }).catch(() => {});
     try { appStorage.set("sayman-customer", JSON.stringify({ name: order.name, phone: order.phone, address: order.address, type: order.type, pay: order.pay })); } catch {}
     setLastOrder(newOrder);
     setOrderNum(num);
@@ -317,11 +356,11 @@ export default function SaymanStore() {
           <p style={{ color: "#777", fontSize: 14 }}>Введите PIN-код администратора</p>
           <input type="password" inputMode="numeric" value={pinInput} autoFocus
             onChange={(e) => setPinInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") { if (pinInput === ADMIN_PIN) { setStaffAuth(true); setPinInput(""); } else { setPinInput(""); alert("Неверный PIN-код"); } } }}
+            onKeyDown={(e) => { if (e.key === "Enter") tryStaffLogin(pinInput); }}
             style={{ width: "100%", padding: "16px", borderRadius: 14, border: "1.5px solid #ddd", fontSize: 24, textAlign: "center", letterSpacing: 8, marginTop: 18, background: "#fff" }}
             placeholder="••••" />
           <button style={{ ...S.btn("#1B1B18"), width: "100%", marginTop: 14, padding: 15 }}
-            onClick={() => { if (pinInput === ADMIN_PIN) { setStaffAuth(true); setPinInput(""); } else { setPinInput(""); alert("Неверный PIN-код"); } }}>
+            onClick={() => tryStaffLogin(pinInput)}>
             Войти
           </button>
           <button style={{ background: "none", border: "none", color: "#888", fontSize: 14, fontWeight: 700, marginTop: 18 }} onClick={() => setScreen("shop")}>
@@ -335,7 +374,7 @@ export default function SaymanStore() {
         <div style={{ ...S.wrap, display: "flex", alignItems: "center", justifyContent: "space-between", height: 60, flexWrap: "wrap" }}>
           <div style={{ fontFamily: "'Unbounded'", fontWeight: 900, fontSize: 18 }}>САЙМАН · админ</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => { setStaffAuth(false); setScreen("shop"); }} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>Выйти</button>
+            <button onClick={() => { setStaffAuth(false); setStaffPin(""); setScreen("shop"); }} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>Выйти</button>
             <button onClick={() => setScreen("shop")} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>← В магазин</button>
           </div>
         </div>
@@ -448,7 +487,7 @@ export default function SaymanStore() {
       <div style={{ ...S.wrap, maxWidth: 720, paddingTop: 24, paddingBottom: 60 }}>
         {(() => {
           const today = new Date().toLocaleDateString("ru-RU");
-          const todayOrders = orders.filter((o) => o.date === today);
+          const todayOrders = adminOrders.filter((o) => o.date === today);
           const todayRevenue = todayOrders.reduce((s, o) => s + o.total, 0);
           return (
             <div style={{ background: "#1B1B18", color: "#fff", borderRadius: 16, padding: "16px 20px", marginBottom: 16, display: "flex", gap: 28, flexWrap: "wrap" }}>
@@ -462,31 +501,32 @@ export default function SaymanStore() {
               </div>
               <div>
                 <div style={{ fontSize: 12, opacity: 0.6, fontWeight: 700 }}>ВСЕГО ЗАКАЗОВ</div>
-                <div style={{ fontFamily: "'Unbounded'", fontSize: 24, fontWeight: 700 }}>{orders.length}</div>
+                <div style={{ fontFamily: "'Unbounded'", fontSize: 24, fontWeight: 700 }}>{adminOrders.length}</div>
               </div>
+              <button onClick={() => loadAdminOrders(staffPin).catch(() => {})} style={{ marginLeft: "auto", alignSelf: "center", background: "rgba(255,255,255,.15)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 13 }}>⟳ Обновить</button>
             </div>
           );
         })()}
         <div style={{ display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
           {Object.entries(STATUS).map(([k, s]) => (
             <div key={k} style={{ background: "#fff", borderRadius: 12, padding: "10px 16px", fontSize: 14, fontWeight: 700 }}>
-              <span style={{ color: s.color }}>●</span> {s.label}: {orders.filter((o) => o.status === k).length}
+              <span style={{ color: s.color }}>●</span> {s.label}: {adminOrders.filter((o) => o.status === k).length}
             </div>
           ))}
         </div>
-        {orders.length === 0 ? (
+        {adminOrders.length === 0 ? (
           <div style={{ textAlign: "center", padding: 60, color: "#888", background: "#fff", borderRadius: 16 }}>
             <div style={{ fontSize: 40 }}>📭</div>
             <p style={{ marginTop: 10 }}>Заказов пока нет. Как только клиент оформит заказ на сайте — он появится здесь.</p>
           </div>
-        ) : orders.map((o) => (
-          <div key={o.num} style={{ background: "#fff", borderRadius: 16, padding: 18, marginBottom: 14, animation: "fadeUp .3s ease" }}>
+        ) : adminOrders.map((o) => (
+          <div key={o.id} style={{ background: "#fff", borderRadius: 16, padding: 18, marginBottom: 14, animation: "fadeUp .3s ease" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
               <div>
                 <span style={{ fontFamily: "'Unbounded'", fontWeight: 700, fontSize: 16 }}>{o.num}</span>
                 <span style={{ color: "#999", fontSize: 13, marginLeft: 10 }}>{o.date ? o.date + " · " : ""}{o.time}</span>
               </div>
-              <button onClick={() => cycleStatus(o.num)}
+              <button onClick={() => cycleAdminStatus(o.id, o.status)}
                 style={{ background: STATUS[o.status].color, color: "#fff", border: "none", borderRadius: 99, padding: "7px 16px", fontWeight: 700, fontSize: 13 }}>
                 {STATUS[o.status].label} →
               </button>
@@ -497,8 +537,8 @@ export default function SaymanStore() {
               {o.comment && <><br />💬 {o.comment}</>}
             </div>
             <div style={{ borderTop: "1px dashed #eee", marginTop: 10, paddingTop: 10, fontSize: 14 }}>
-              {o.items.map((i) => (
-                <div key={i.id} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
+              {(o.items || []).map((i, idx) => (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
                   <span>{i.emoji} {i.name} × {i.qty}</span><span style={{ fontWeight: 600 }}>{fmt(i.qty * i.price)}</span>
                 </div>
               ))}
