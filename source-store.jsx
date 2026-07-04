@@ -163,6 +163,7 @@ export default function SaymanStore() {
   const [newProd, setNewProd] = useState(null);
   const [adminOrders, setAdminOrders] = useState([]);
   const [staffPin, setStaffPin] = useState("");
+  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   // Загрузка сохранённых данных (заказы + данные клиента) при открытии
   useEffect(() => {
@@ -217,6 +218,22 @@ export default function SaymanStore() {
     try { await loadAdminOrders(pin); setStaffPin(pin); setStaffAuth(true); setPinInput(""); }
     catch { setPinInput(""); alert("Неверный PIN-код (или нет связи с базой)"); }
   };
+  const exportCSV = () => {
+    const esc = (v) => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+    const rows = [["Номер", "Дата", "Время", "Имя", "Телефон", "Получение", "Адрес", "Оплата", "Статус", "Сумма", "Состав"].join(";")];
+    adminOrders.forEach((o) => rows.push([
+      o.num, o.date, o.time, o.name, o.phone,
+      o.type === "delivery" ? "Доставка" : "Самовывоз", o.address || "",
+      o.pay === "kaspi" ? "Kaspi" : "Наличные", STATUS[o.status]?.label || o.status, o.total,
+      (o.items || []).map((i) => i.name + " x" + i.qty).join(", "),
+    ].map(esc).join(";")));
+    const blob = new Blob(["\ufeff" + rows.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "sayman-заказы-" + new Date().toLocaleDateString("ru-RU") + ".csv";
+    a.click();
+  };
+
   const cycleAdminStatus = (id, cur) => {
     const next = NEXT_STATUS[cur];
     rpc("admin_set_status", { _pin: staffPin, _id: id, _status: next }).catch(dbFail);
@@ -379,7 +396,7 @@ export default function SaymanStore() {
           </div>
         </div>
         <div style={{ ...S.wrap, display: "flex", gap: 6, paddingBottom: 12 }}>
-          {[["orders", "📦 Заказы"], ["products", "🏷️ Товары и цены"]].map(([k, label]) => (
+          {[["orders", "📦 Заказы"], ["products", "🏷️ Товары и цены"], ["stats", "📊 Аналитика"]].map(([k, label]) => (
             <button key={k} onClick={() => setAdminTab(k)}
               style={{ background: adminTab === k ? "#fff" : "rgba(255,255,255,.12)", color: adminTab === k ? "#1B1B18" : "#fff", border: "none", borderRadius: 10, padding: "9px 16px", fontWeight: 800, fontSize: 13.5 }}>
               {label}
@@ -388,6 +405,69 @@ export default function SaymanStore() {
         </div>
       </header>
     );
+
+    // ── вкладка Аналитика ──
+    if (adminTab === "stats") {
+      const now = new Date();
+      const dayKey = (d) => d.toLocaleDateString("ru-RU");
+      const days = [...Array(14)].map((_, i) => { const d = new Date(now); d.setDate(d.getDate() - (13 - i)); return dayKey(d); });
+      const byDay = Object.fromEntries(days.map((d) => [d, { n: 0, sum: 0 }]));
+      const prodAgg = {}; const phoneAgg = {};
+      adminOrders.forEach((o) => {
+        if (byDay[o.date]) { byDay[o.date].n++; byDay[o.date].sum += o.total; }
+        (o.items || []).forEach((i) => { prodAgg[i.name] = prodAgg[i.name] || { qty: 0, sum: 0 }; prodAgg[i.name].qty += i.qty; prodAgg[i.name].sum += i.qty * i.price; });
+        if (o.phone) phoneAgg[o.phone] = (phoneAgg[o.phone] || 0) + 1;
+      });
+      const totalSum = adminOrders.reduce((s, o) => s + o.total, 0);
+      const avg = adminOrders.length ? Math.round(totalSum / adminOrders.length) : 0;
+      const phones = Object.values(phoneAgg);
+      const repeat = phones.length ? Math.round(phones.filter((n) => n > 1).length / phones.length * 100) : 0;
+      const top = Object.entries(prodAgg).sort((a, b) => b[1].sum - a[1].sum).slice(0, 10);
+      const maxDay = Math.max(1, ...Object.values(byDay).map((d) => d.sum));
+      const card = { background: "#fff", borderRadius: 16, padding: 18, marginBottom: 14 };
+      return (
+        <div style={S.page}>
+          <style>{FONTS}</style>
+          {adminHeader}
+          <div style={{ ...S.wrap, maxWidth: 720, paddingTop: 20, paddingBottom: 60 }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+              {[["Заказов всего", adminOrders.length], ["Выручка всего", fmt(totalSum)], ["Средний чек", fmt(avg)], ["Повторные клиенты", repeat + "%"]].map(([l, v]) => (
+                <div key={l} style={{ ...card, flex: "1 1 140px", marginBottom: 0 }}>
+                  <div style={{ fontSize: 11.5, color: "#999", fontWeight: 800, textTransform: "uppercase" }}>{l}</div>
+                  <div style={{ fontFamily: "'Unbounded'", fontSize: 20, fontWeight: 700, marginTop: 4 }}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <div style={card}>
+              <div style={{ fontWeight: 800, marginBottom: 12 }}>Выручка за 14 дней</div>
+              {days.map((d) => (
+                <div key={d} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+                  <span style={{ fontSize: 11.5, color: "#999", width: 66, flexShrink: 0 }}>{d.slice(0, 5)}</span>
+                  <div style={{ flex: 1, background: "#f2f1ed", borderRadius: 6, height: 18, overflow: "hidden" }}>
+                    <div style={{ width: (byDay[d].sum / maxDay * 100) + "%", background: "#1E7A46", height: "100%", borderRadius: 6, transition: "width .4s" }} />
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, width: 100, textAlign: "right", flexShrink: 0 }}>{byDay[d].n ? byDay[d].n + " · " + fmt(byDay[d].sum) : "—"}</span>
+                </div>
+              ))}
+            </div>
+            <div style={card}>
+              <div style={{ fontWeight: 800, marginBottom: 12 }}>Топ-10 товаров по выручке</div>
+              {top.length === 0 && <div style={{ color: "#999", fontSize: 14 }}>Пока нет данных — появятся после первых заказов</div>}
+              {top.map(([name, d], i) => (
+                <div key={name} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid #f4f3ef", fontSize: 14 }}>
+                  <span><b style={{ color: "#999", marginRight: 8 }}>{i + 1}.</b>{name} <span style={{ color: "#999" }}>× {d.qty}</span></span>
+                  <b>{fmt(d.sum)}</b>
+                </div>
+              ))}
+            </div>
+            <button onClick={exportCSV} style={{ ...S.btn("#1B1B18"), width: "100%", padding: 15 }}>
+              ⬇️ Выгрузить все заказы в Excel (CSV)
+            </button>
+            <p style={{ fontSize: 12.5, color: "#999", marginTop: 8, textAlign: "center" }}>Файл откроется в Excel — для учёта, сверки кассы и налогов</p>
+          </div>
+        </div>
+      );
+    }
 
     // ── вкладка Товары и цены (CRM) ──
     if (adminTab === "products") {
@@ -753,6 +833,23 @@ export default function SaymanStore() {
         </div>
       </main>
 
+      {privacyOpen && (
+        <div onClick={() => setPrivacyOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 40, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, padding: 24, maxWidth: 520, maxHeight: "80vh", overflowY: "auto", fontSize: 14, lineHeight: 1.65 }}>
+            <h2 style={{ fontFamily: "'Unbounded'", fontSize: 18, marginBottom: 12 }}>Политика конфиденциальности</h2>
+            <p>Оформляя заказ на этом сайте, вы передаёте магазину «Сайман» (г. Шымкент, ул. Байтерекова, 9а) своё имя, номер телефона и адрес доставки. Эти данные используются исключительно для приёма, сборки и доставки вашего заказа и для связи с вами по нему.</p>
+            <p style={{ marginTop: 10 }}>Мы не передаём ваши данные третьим лицам, не используем их для рассылок без вашего согласия и храним их в защищённой базе данных. Обработка осуществляется в соответствии с Законом РК «О персональных данных и их защите».</p>
+            <p style={{ marginTop: 10 }}>Чтобы уточнить или удалить свои данные, напишите нам в WhatsApp: +7 775 568 33 13.</p>
+            <button onClick={() => setPrivacyOpen(false)} style={{ ...S.btn("#1B1B18"), width: "100%", marginTop: 16 }}>Понятно</button>
+          </div>
+        </div>
+      )}
+
+      {/* Кнопка WhatsApp для вопросов */}
+      <a href={"https://wa.me/" + WA_PHONE + "?text=" + encodeURIComponent("Здравствуйте! Вопрос по магазину Сайман: ")} target="_blank" rel="noreferrer"
+        style={{ position: "fixed", bottom: 20, right: 16, width: 54, height: 54, borderRadius: "50%", background: "#25D366", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 27, boxShadow: "0 6px 18px rgba(0,0,0,.25)", zIndex: 24, textDecoration: "none" }}
+        title="Написать в WhatsApp">💬</a>
+
       {/* Плавающая кнопка итога */}
       {cartCount > 0 && !cartOpen && (
         <button onClick={() => setCartOpen(true)}
@@ -821,6 +918,10 @@ export default function SaymanStore() {
             🕗 Ежедневно 08:00 – 22:00<br />
             📞 +7 775 568 33 13
           </div>
+          <button onClick={() => setPrivacyOpen(true)}
+            style={{ background: "none", color: "rgba(255,255,255,.6)", border: "none", padding: "8px 0", fontSize: 13, alignSelf: "center", textDecoration: "underline" }}>
+            Политика конфиденциальности
+          </button>
           <button onClick={() => setScreen("admin")}
             style={{ background: "rgba(255,255,255,.08)", color: "rgba(255,255,255,.6)", border: "1px solid rgba(255,255,255,.15)", borderRadius: 10, padding: "8px 14px", fontSize: 13, alignSelf: "center" }}>
             🔐 Админ-панель
