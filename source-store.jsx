@@ -123,6 +123,18 @@ const sPost = (path, body, extra) => fetch(SUPA_URL + "/rest/v1/" + path, { meth
 const rpc = (fn, args) => sPost("rpc/" + fn, args);
 const rowToProduct = (r) => ({ id: r.id, cat: r.cat, name: r.name, unit: r.unit, price: r.price, oldPrice: r.old_price || undefined, hit: r.hit || undefined, img: r.img || undefined, emoji: r.emoji || "🛒", available: r.available !== false });
 const productToRow = (sec, p) => ({ id: p.id, section: sec, cat: p.cat, name: p.name, unit: p.unit, price: p.price, old_price: p.oldPrice ?? null, hit: !!p.hit, img: p.img ?? null, emoji: p.emoji || "🛒", available: p.available !== false });
+const getClientId = () => {
+  try {
+    let v = localStorage.getItem("sayman-cid");
+    if (!v) {
+      v = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));
+      localStorage.setItem("sayman-cid", v);
+    }
+    return v;
+  } catch { return "no-storage"; }
+};
+const ORDER_FLOW = ["new", "accepted", "picking", "picked", "delivering", "done"];
+
 const mapOrderRow = (r) => ({ ...r, time: new Date(r.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }), date: new Date(r.created_at).toLocaleDateString("ru-RU") });
 
 const fmt = (n) => n.toLocaleString("ru-RU") + " ₸";
@@ -175,6 +187,8 @@ export default function SaymanStore() {
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [staffRole, setStaffRole] = useState("");
   const [pickState, setPickState] = useState({});
+  const [myOrders, setMyOrders] = useState([]);
+  const [myLoading, setMyLoading] = useState(false);
 
   // Загрузка сохранённых данных (заказы + данные клиента) при открытии
   useEffect(() => {
@@ -345,7 +359,7 @@ export default function SaymanStore() {
     sPost("orders", {
       num, name: order.name, phone: order.phone, type: order.type,
       address: order.address, pay: order.pay, comment: order.comment,
-      items: newOrder.items, total: newOrder.total,
+      items: newOrder.items, total: newOrder.total, client_id: getClientId(),
     }, { Prefer: "return=minimal" }).catch(() => {});
     try { appStorage.set("sayman-customer", JSON.stringify({ name: order.name, phone: order.phone, address: order.address, type: order.type, pay: order.pay })); } catch {}
     setLastOrder(newOrder);
@@ -359,6 +373,27 @@ export default function SaymanStore() {
     persistOrders(next);
     return next;
   });
+
+  const loadMyOrders = async () => {
+    setMyLoading(true);
+    try {
+      const rows = await rpc("client_get_orders", { _cid: getClientId() });
+      setMyOrders(rows.map(mapOrderRow));
+    } catch {}
+    setMyLoading(false);
+  };
+  const repeatFromItems = (items) => {
+    const next = {};
+    let missing = 0;
+    (items || []).forEach((i) => {
+      const p = allProducts.find((x) => x.id === i.id);
+      if (p && p.available !== false) next[i.id] = i.qty; else missing++;
+    });
+    setCart(next);
+    setScreen("shop");
+    setCartOpen(true);
+    if (missing) alert("Некоторых товаров из того заказа сейчас нет в каталоге");
+  };
 
   const repeatLastOrder = () => {
     if (!orders.length) return;
@@ -817,6 +852,84 @@ export default function SaymanStore() {
   );
   }
 
+  // ── личный кабинет клиента ──
+  if (screen === "account") {
+    const inp = { width: "100%", padding: "12px 14px", borderRadius: 12, border: "1.5px solid #ddd", fontSize: 15, marginTop: 6, background: "#fff" };
+    const saveProfile = () => {
+      try { appStorage.set("sayman-customer", JSON.stringify({ name: order.name, phone: order.phone, address: order.address, type: order.type, pay: order.pay })); } catch {}
+      alert("Данные сохранены — при заказе будут подставляться сами");
+    };
+    return (
+      <div style={S.page}>
+        <style>{FONTS}</style>
+        <div style={{ ...S.wrap, maxWidth: 560, paddingTop: 24, paddingBottom: 60, animation: "fadeUp .3s ease" }}>
+          <button onClick={() => setScreen("shop")} style={{ background: "none", border: "none", fontSize: 15, fontWeight: 700, color: "#666" }}>← В магазин</button>
+          <h1 style={{ fontFamily: "'Unbounded'", fontSize: 24, margin: "16px 0 4px" }}>Мои заказы</h1>
+          <p style={{ color: "#888", fontSize: 13.5, marginBottom: 16 }}>История сохраняется на этом устройстве</p>
+
+          {myLoading && <div style={{ textAlign: "center", padding: 30, color: "#999" }}>Загружаю…</div>}
+          {!myLoading && myOrders.length === 0 && (
+            <div style={{ textAlign: "center", padding: 40, background: "#fff", borderRadius: 16, color: "#888" }}>
+              <div style={{ fontSize: 40 }}>🛍️</div>
+              <p style={{ marginTop: 10 }}>Заказов с этого устройства пока не было. Оформите первый — и он появится здесь со статусом.</p>
+            </div>
+          )}
+          {myOrders.map((o) => {
+            const idx = ORDER_FLOW.indexOf(o.status);
+            const isCancelled = o.status === "cancelled";
+            return (
+              <div key={o.id} style={{ background: "#fff", borderRadius: 16, padding: 18, marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
+                  <div>
+                    <span style={{ fontFamily: "'Unbounded'", fontWeight: 700, fontSize: 15 }}>{o.num}</span>
+                    <span style={{ color: "#999", fontSize: 12.5, marginLeft: 8 }}>{o.date} · {o.time}</span>
+                  </div>
+                  <span style={{ background: (STATUS[o.status] || STATUS.new).color, color: "#fff", borderRadius: 99, padding: "4px 12px", fontSize: 12, fontWeight: 800 }}>
+                    {(STATUS[o.status] || STATUS.new).label}
+                  </span>
+                </div>
+                {!isCancelled && (
+                  <div style={{ display: "flex", gap: 4, marginTop: 12 }}>
+                    {ORDER_FLOW.map((s, i) => (
+                      <div key={s} style={{ flex: 1, height: 5, borderRadius: 3, background: i <= idx ? "#1E7A46" : "#eceae4", transition: "background .3s" }} />
+                    ))}
+                  </div>
+                )}
+                <div style={{ fontSize: 13.5, color: "#777", marginTop: 10, lineHeight: 1.5 }}>
+                  {(o.items || []).slice(0, 3).map((i) => i.name + " ×" + i.qty).join(", ")}
+                  {(o.items || []).length > 3 ? " и ещё " + ((o.items || []).length - 3) + "…" : ""}
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+                  <b style={{ fontSize: 16 }}>{fmt(o.total)}</b>
+                  <button onClick={() => repeatFromItems(o.items)} style={{ ...S.btn(theme.accentSoft, theme.accentDark), padding: "9px 16px", fontSize: 13.5 }}>
+                    🔄 Повторить
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          {myOrders.length > 0 && (
+            <button onClick={loadMyOrders} style={{ ...S.btn("#fff", "#666"), width: "100%", padding: 12, fontSize: 14, border: "1.5px solid #e2e0da", marginBottom: 20 }}>
+              ⟳ Обновить статусы
+            </button>
+          )}
+
+          <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginTop: 8 }}>
+            <div style={{ fontWeight: 800, marginBottom: 4 }}>Мои данные</div>
+            <p style={{ fontSize: 12.5, color: "#999" }}>Подставляются автоматически при оформлении</p>
+            <label style={{ fontWeight: 700, fontSize: 13, display: "block", marginTop: 12 }}>Имя</label>
+            <input style={inp} value={order.name} onChange={(e) => setOrder({ ...order, name: e.target.value })} />
+            <label style={{ fontWeight: 700, fontSize: 13, display: "block", marginTop: 12 }}>Телефон</label>
+            <input style={inp} value={order.phone} onChange={(e) => setOrder({ ...order, phone: e.target.value })} />
+            <label style={{ fontWeight: 700, fontSize: 13, display: "block", marginTop: 12 }}>Адрес доставки</label>
+            <input style={inp} value={order.address} onChange={(e) => setOrder({ ...order, address: e.target.value })} />
+            <button onClick={saveProfile} style={{ ...S.btn("#1B1B18"), width: "100%", marginTop: 14, padding: 13 }}>Сохранить</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── экран оформления ──
   if (screen === "checkout") {
     const inp = { width: "100%", padding: "13px 14px", borderRadius: 12, border: "1.5px solid #ddd", fontSize: 15, marginTop: 6, background: "#fff" };
@@ -894,6 +1007,8 @@ export default function SaymanStore() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <a href="tel:+77755683313" style={{ color: "#fff", textDecoration: "none", fontSize: 14, fontWeight: 700, opacity: 0.9 }}>📞 +7 775 568 33 13</a>
+            <button onClick={() => { setScreen("account"); loadMyOrders(); }} title="Мои заказы"
+              style={{ ...S.btn("rgba(255,255,255,.14)"), padding: "10px 13px", fontSize: 17 }}>👤</button>
             <button onClick={() => setCartOpen(true)} style={{ ...S.btn(theme.accent), padding: "10px 16px", position: "relative" }}>
               🛒 Корзина
               {cartCount > 0 && (
