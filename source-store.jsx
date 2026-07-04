@@ -121,8 +121,8 @@ const sHeaders = { apikey: SUPA_KEY, Authorization: "Bearer " + SUPA_KEY, "Conte
 const sGet = (path) => fetch(SUPA_URL + "/rest/v1/" + path, { headers: sHeaders }).then((r) => { if (!r.ok) throw new Error("db"); return r.json(); });
 const sPost = (path, body, extra) => fetch(SUPA_URL + "/rest/v1/" + path, { method: "POST", headers: { ...sHeaders, ...(extra || {}) }, body: JSON.stringify(body) }).then((r) => { if (!r.ok) return r.text().then((t) => { throw new Error(t); }); return r.text().then((t) => (t ? JSON.parse(t) : null)); });
 const rpc = (fn, args) => sPost("rpc/" + fn, args);
-const rowToProduct = (r) => ({ id: r.id, cat: r.cat, name: r.name, unit: r.unit, price: r.price, oldPrice: r.old_price || undefined, hit: r.hit || undefined, img: r.img || undefined, emoji: r.emoji || "🛒" });
-const productToRow = (sec, p) => ({ id: p.id, section: sec, cat: p.cat, name: p.name, unit: p.unit, price: p.price, old_price: p.oldPrice ?? null, hit: !!p.hit, img: p.img ?? null, emoji: p.emoji || "🛒" });
+const rowToProduct = (r) => ({ id: r.id, cat: r.cat, name: r.name, unit: r.unit, price: r.price, oldPrice: r.old_price || undefined, hit: r.hit || undefined, img: r.img || undefined, emoji: r.emoji || "🛒", available: r.available !== false });
+const productToRow = (sec, p) => ({ id: p.id, section: sec, cat: p.cat, name: p.name, unit: p.unit, price: p.price, old_price: p.oldPrice ?? null, hit: !!p.hit, img: p.img ?? null, emoji: p.emoji || "🛒", available: p.available !== false });
 const mapOrderRow = (r) => ({ ...r, time: new Date(r.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }), date: new Date(r.created_at).toLocaleDateString("ru-RU") });
 
 const fmt = (n) => n.toLocaleString("ru-RU") + " ₸";
@@ -139,8 +139,17 @@ const buildWaMsg = (o) => encodeURIComponent(
   "\n───────────\nИТОГО: " + o.total.toLocaleString("ru-RU") + " ₸"
 );
 
-const STATUS = { new: { label: "Новый", color: "#C7411A" }, work: { label: "В работе", color: "#C77B12" }, done: { label: "Выполнен", color: "#1E7A46" } };
-const NEXT_STATUS = { new: "work", work: "done", done: "new" };
+const STATUS = {
+  new: { label: "Новый", color: "#C7411A" },
+  accepted: { label: "Принят", color: "#B3540A" },
+  picking: { label: "Сборка", color: "#C77B12" },
+  picked: { label: "Собран", color: "#8A7500" },
+  delivering: { label: "В пути", color: "#1E5F7A" },
+  done: { label: "Доставлен", color: "#1E7A46" },
+  cancelled: { label: "Отменён", color: "#888" },
+  work: { label: "В работе", color: "#C77B12" },
+};
+const NEXT_STATUS = { new: "accepted", accepted: "picking", picking: "picked", picked: "delivering", delivering: "done", work: "done" };
 
 
 export default function SaymanStore() {
@@ -164,6 +173,8 @@ export default function SaymanStore() {
   const [adminOrders, setAdminOrders] = useState([]);
   const [staffPin, setStaffPin] = useState("");
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [staffRole, setStaffRole] = useState("");
+  const [pickState, setPickState] = useState({});
 
   // Загрузка сохранённых данных (заказы + данные клиента) при открытии
   useEffect(() => {
@@ -211,8 +222,10 @@ export default function SaymanStore() {
     setProductsData((prev) => ({ ...prev, [sec]: [full, ...prev[sec]] }));
   };
   const loadAdminOrders = async (pin) => {
-    const rows = await rpc("admin_get_orders", { _pin: pin });
-    setAdminOrders(rows.map(mapOrderRow));
+    const res = await rpc("staff_login", { _pin: pin });
+    setStaffRole(res.role);
+    setAdminOrders((res.orders || []).map(mapOrderRow));
+    return res.role;
   };
   const tryStaffLogin = async (pin) => {
     try { await loadAdminOrders(pin); setStaffPin(pin); setStaffAuth(true); setPinInput(""); }
@@ -234,10 +247,37 @@ export default function SaymanStore() {
     a.click();
   };
 
+  const setOrderStatus = (id, status) => {
+    rpc("staff_set_status", { _pin: staffPin, _id: id, _status: status }).catch(dbFail);
+    setAdminOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+  };
   const cycleAdminStatus = (id, cur) => {
     const next = NEXT_STATUS[cur];
-    rpc("admin_set_status", { _pin: staffPin, _id: id, _status: next }).catch(dbFail);
-    setAdminOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: next } : o)));
+    if (!next) return;
+    setOrderStatus(id, next);
+  };
+  const cancelOrder = (id) => {
+    if (!window.confirm("Отменить заказ?")) return;
+    setOrderStatus(id, "cancelled");
+  };
+  const togglePickItem = (oid, idx, kind) => setPickState((prev) => {
+    const cur = prev[oid] || { col: {}, miss: {} };
+    const next = { col: { ...cur.col }, miss: { ...cur.miss } };
+    if (kind === "col") { next.col[idx] = !next.col[idx]; if (next.col[idx]) delete next.miss[idx]; }
+    else { next.miss[idx] = !next.miss[idx]; if (next.miss[idx]) delete next.col[idx]; }
+    return { ...prev, [oid]: next };
+  });
+  const finishPick = (o) => {
+    const st = pickState[o.id] || { col: {}, miss: {} };
+    const items = (o.items || []).map((i, idx) => (st.miss[idx] ? { ...i, missing: true } : i));
+    const goodsOld = (o.items || []).reduce((s, i) => s + i.qty * i.price, 0);
+    const deliveryPart = Math.max(0, o.total - goodsOld);
+    const goodsNew = items.filter((i) => !i.missing).reduce((s, i) => s + i.qty * i.price, 0);
+    const total = goodsNew + deliveryPart;
+    rpc("staff_update_items", { _pin: staffPin, _id: o.id, _items: items, _total: total }).catch(dbFail);
+    rpc("staff_set_status", { _pin: staffPin, _id: o.id, _status: "picked" }).catch(() => {});
+    setAdminOrders((prev) => prev.map((x) => (x.id === o.id ? { ...x, items, total, status: "picked" } : x)));
+    if (items.some((i) => i.missing)) alert("Есть позиции «нет в наличии» — позвоните клиенту и сообщите новую сумму: " + fmt(total));
   };
   const uploadPhoto = (sec, id, file) => {
     if (!file) return;
@@ -263,15 +303,21 @@ export default function SaymanStore() {
   useEffect(() => { setCategory("Все"); setSearch(""); }, [mode]);
 
   const visible = useMemo(() => {
-    let list = products.filter((p) =>
-      (category === "Все" || p.cat === category) &&
-      p.name.toLowerCase().includes(search.toLowerCase())
-    );
+    const q = search.toLowerCase().trim();
+    let list;
+    if (q) {
+      list = [
+        ...productsData.food.map((p) => ({ ...p, _sec: "food" })),
+        ...productsData.build.map((p) => ({ ...p, _sec: "build" })),
+      ].filter((p) => p.available !== false && p.name.toLowerCase().includes(q));
+    } else {
+      list = products.filter((p) => p.available !== false && (category === "Все" || p.cat === category));
+    }
     if (sort === "cheap") list = [...list].sort((a, b) => a.price - b.price);
     if (sort === "expensive") list = [...list].sort((a, b) => b.price - a.price);
     if (sort === "promo") list = [...list].sort((a, b) => (b.oldPrice ? 1 : 0) + (b.hit ? 1 : 0) - (a.oldPrice ? 1 : 0) - (a.hit ? 1 : 0));
     return list;
-  }, [products, category, search, sort]);
+  }, [products, productsData, category, search, sort]);
 
   const allProducts = [...productsData.food, ...productsData.build];
   const cartItems = Object.entries(cart).filter(([, q]) => q > 0)
@@ -386,12 +432,134 @@ export default function SaymanStore() {
         </div>
       </div>
     );
+    // ── Экран СБОРЩИКА ──
+    if (staffRole === "picker") {
+      const active = adminOrders.filter((o) => ["new", "accepted", "picking"].includes(o.status));
+      return (
+        <div style={S.page}>
+          <style>{FONTS}</style>
+          <header style={{ background: "#1B1B18", color: "#fff" }}>
+            <div style={{ ...S.wrap, display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}>
+              <div style={{ fontFamily: "'Unbounded'", fontWeight: 900, fontSize: 17 }}>🧺 СБОРКА ЗАКАЗОВ</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => loadAdminOrders(staffPin).catch(() => {})} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>⟳</button>
+                <button onClick={() => { setStaffAuth(false); setStaffPin(""); setStaffRole(""); setScreen("shop"); }} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>Выйти</button>
+              </div>
+            </div>
+          </header>
+          <div style={{ ...S.wrap, maxWidth: 640, paddingTop: 20, paddingBottom: 60 }}>
+            {active.length === 0 && (
+              <div style={{ textAlign: "center", padding: 60, color: "#888", background: "#fff", borderRadius: 16 }}>
+                <div style={{ fontSize: 40 }}>✅</div>
+                <p style={{ marginTop: 10 }}>Все заказы собраны. Новые появятся здесь — нажимайте ⟳ для проверки.</p>
+              </div>
+            )}
+            {active.map((o) => {
+              const st = pickState[o.id] || { col: {}, miss: {} };
+              const allTouched = (o.items || []).every((_, idx) => st.col[idx] || st.miss[idx]);
+              return (
+                <div key={o.id} style={{ background: "#fff", borderRadius: 16, padding: 18, marginBottom: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                    <div>
+                      <span style={{ fontFamily: "'Unbounded'", fontWeight: 700, fontSize: 16 }}>{o.num}</span>
+                      <span style={{ background: STATUS[o.status].color, color: "#fff", borderRadius: 99, padding: "4px 12px", fontSize: 12, fontWeight: 800, marginLeft: 10 }}>{STATUS[o.status].label}</span>
+                    </div>
+                    <span style={{ fontSize: 13, color: "#888" }}>{o.time} · {o.type === "delivery" ? "🚚 Доставка" : "🏪 Самовывоз"}</span>
+                  </div>
+                  {o.comment && <div style={{ fontSize: 13.5, color: "#7A5200", background: "#FBF1E1", borderRadius: 10, padding: "8px 12px", marginTop: 10 }}>💬 {o.comment}</div>}
+                  {o.status !== "picking" ? (
+                    <button onClick={() => setOrderStatus(o.id, "picking")} style={{ ...S.btn("#C77B12"), width: "100%", marginTop: 14, padding: 14 }}>
+                      ▶️ Взять в сборку ({(o.items || []).length} поз.)
+                    </button>
+                  ) : (
+                    <>
+                      <div style={{ marginTop: 12 }}>
+                        {(o.items || []).map((i, idx) => (
+                          <div key={idx} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid #f4f3ef", opacity: st.miss[idx] ? 0.5 : 1 }}>
+                            <button onClick={() => togglePickItem(o.id, idx, "col")}
+                              style={{ width: 34, height: 34, borderRadius: 10, border: "none", fontSize: 17, background: st.col[idx] ? "#1E7A46" : "#f2f1ed", color: st.col[idx] ? "#fff" : "#999", flexShrink: 0 }}>✓</button>
+                            <div style={{ flex: 1, fontSize: 14.5, fontWeight: 700, textDecoration: st.miss[idx] ? "line-through" : "none" }}>
+                              {i.name}
+                              <span style={{ color: "#C7411A", fontWeight: 800 }}> × {i.qty}</span>
+                              <div style={{ fontSize: 12, color: "#999", fontWeight: 500 }}>{fmt(i.price)} / {i.unit || "шт"}</div>
+                            </div>
+                            <button onClick={() => togglePickItem(o.id, idx, "miss")}
+                              style={{ borderRadius: 10, border: "none", fontSize: 12, fontWeight: 800, padding: "9px 10px", background: st.miss[idx] ? "#C7411A" : "#f2f1ed", color: st.miss[idx] ? "#fff" : "#999", flexShrink: 0 }}>нет</button>
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={() => finishPick(o)} disabled={!allTouched}
+                        style={{ ...S.btn(allTouched ? "#1E7A46" : "#ccc"), width: "100%", marginTop: 14, padding: 15 }}>
+                        {allTouched ? "✅ Заказ собран" : "Отметьте все позиции (✓ или «нет»)"}
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ── Экран КУРЬЕРА ──
+    if (staffRole === "courier") {
+      const active = adminOrders.filter((o) => ["picked", "delivering"].includes(o.status) && o.type === "delivery");
+      return (
+        <div style={S.page}>
+          <style>{FONTS}</style>
+          <header style={{ background: "#1B1B18", color: "#fff" }}>
+            <div style={{ ...S.wrap, display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}>
+              <div style={{ fontFamily: "'Unbounded'", fontWeight: 900, fontSize: 17 }}>🛵 ДОСТАВКА</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => loadAdminOrders(staffPin).catch(() => {})} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>⟳</button>
+                <button onClick={() => { setStaffAuth(false); setStaffPin(""); setStaffRole(""); setScreen("shop"); }} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>Выйти</button>
+              </div>
+            </div>
+          </header>
+          <div style={{ ...S.wrap, maxWidth: 560, paddingTop: 20, paddingBottom: 60 }}>
+            {active.length === 0 && (
+              <div style={{ textAlign: "center", padding: 60, color: "#888", background: "#fff", borderRadius: 16 }}>
+                <div style={{ fontSize: 40 }}>🛵</div>
+                <p style={{ marginTop: 10 }}>Доставок нет. Собранные заказы появятся здесь — нажимайте ⟳.</p>
+              </div>
+            )}
+            {active.map((o) => (
+              <div key={o.id} style={{ background: "#fff", borderRadius: 16, padding: 18, marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontFamily: "'Unbounded'", fontWeight: 700, fontSize: 16 }}>{o.num}</span>
+                  <span style={{ background: STATUS[o.status].color, color: "#fff", borderRadius: 99, padding: "4px 12px", fontSize: 12, fontWeight: 800 }}>{STATUS[o.status].label}</span>
+                </div>
+                <div style={{ fontSize: 15, marginTop: 12, lineHeight: 1.7 }}>
+                  <b>📍 {o.address}</b><br />
+                  👤 {o.name}
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <a href={"tel:+" + String(o.phone || "").replace(/\D/g, "")} style={{ ...S.btn("#1B1B18"), flex: 1, textAlign: "center", textDecoration: "none", padding: 13 }}>📞 Позвонить</a>
+                  <a href={"https://2gis.kz/shymkent/search/" + encodeURIComponent(o.address || "")} target="_blank" rel="noreferrer" style={{ ...S.btn("#f2f1ed", "#1B1B18"), flex: 1, textAlign: "center", textDecoration: "none", padding: 13 }}>🗺️ Маршрут</a>
+                </div>
+                <div style={{ background: "#F6F5F2", borderRadius: 12, padding: "12px 14px", marginTop: 12, display: "flex", justifyContent: "space-between", fontWeight: 800, fontSize: 16 }}>
+                  <span>{o.pay === "kaspi" ? "Kaspi перевод" : "💵 Наличные"}</span>
+                  <span>{fmt(o.total)}</span>
+                </div>
+                {o.status === "picked" ? (
+                  <button onClick={() => setOrderStatus(o.id, "delivering")} style={{ ...S.btn("#1E5F7A"), width: "100%", marginTop: 12, padding: 15 }}>🛵 Забрал, еду</button>
+                ) : (
+                  <button onClick={() => setOrderStatus(o.id, "done")} style={{ ...S.btn("#1E7A46"), width: "100%", marginTop: 12, padding: 15 }}>✅ Доставлено</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     const adminHeader = (
       <header style={{ background: "#1B1B18", color: "#fff" }}>
         <div style={{ ...S.wrap, display: "flex", alignItems: "center", justifyContent: "space-between", height: 60, flexWrap: "wrap" }}>
           <div style={{ fontFamily: "'Unbounded'", fontWeight: 900, fontSize: 18 }}>САЙМАН · админ</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => { setStaffAuth(false); setStaffPin(""); setScreen("shop"); }} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>Выйти</button>
+            <button onClick={() => { setStaffAuth(false); setStaffPin(""); setStaffRole(""); setScreen("shop"); }} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>Выйти</button>
             <button onClick={() => setScreen("shop")} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>← В магазин</button>
           </div>
         </div>
@@ -518,7 +686,7 @@ export default function SaymanStore() {
             </div>
 
             {productsData[adminSection].map((p) => (
-              <div key={p.id} style={{ background: "#fff", borderRadius: 14, padding: "10px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div key={p.id} style={{ background: "#fff", borderRadius: 14, padding: "10px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", opacity: p.available === false ? 0.55 : 1 }}>
                 <label style={{ width: 52, height: 52, borderRadius: 10, background: secTheme.accentSoft, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, cursor: "pointer", overflow: "hidden", flexShrink: 0 }} title="Нажмите, чтобы загрузить фото">
                   {p.img ? <img src={p.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : p.emoji}
                   <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => uploadPhoto(adminSection, p.id, e.target.files[0])} />
@@ -526,7 +694,13 @@ export default function SaymanStore() {
                 <div style={{ flex: "1 1 160px", minWidth: 140 }}>
                   <input key={p.id + p.name} defaultValue={p.name} onBlur={(e) => e.target.value.trim() && updateProduct(adminSection, p.id, { name: e.target.value.trim() })}
                     style={{ ...inp, width: "100%", fontWeight: 700, border: "1.5px solid transparent", padding: "6px 8px" }} />
-                  <div style={{ fontSize: 11.5, color: "#999", paddingLeft: 8 }}>{p.cat} · {p.unit}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, paddingLeft: 4 }}>
+                    <input key={p.id + "-cat" + p.cat} defaultValue={p.cat}
+                      onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== p.cat && updateProduct(adminSection, p.id, { cat: e.target.value.trim() })}
+                      title="Категория товара — можно переименовать"
+                      style={{ fontSize: 11.5, color: "#999", border: "1px solid transparent", borderRadius: 6, padding: "2px 4px", width: 130, background: "transparent" }} />
+                    <span style={{ fontSize: 11.5, color: "#bbb" }}>· {p.unit}</span>
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <div>
@@ -544,6 +718,10 @@ export default function SaymanStore() {
                   <label style={{ fontSize: 12, fontWeight: 800, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, cursor: "pointer" }}>
                     <span style={{ color: "#999", fontSize: 10.5 }}>ХИТ</span>
                     <input type="checkbox" checked={!!p.hit} onChange={(e) => updateProduct(adminSection, p.id, { hit: e.target.checked || undefined })} style={{ width: 18, height: 18 }} />
+                  </label>
+                  <label style={{ fontSize: 12, fontWeight: 800, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, cursor: "pointer" }}>
+                    <span style={{ color: "#999", fontSize: 10.5 }}>ЕСТЬ</span>
+                    <input type="checkbox" checked={p.available !== false} onChange={(e) => updateProduct(adminSection, p.id, { available: e.target.checked })} style={{ width: 18, height: 18, accentColor: "#1E7A46" }} />
                   </label>
                   {p.img && (
                     <button onClick={() => updateProduct(adminSection, p.id, { img: undefined })} title="Убрать фото"
@@ -606,10 +784,16 @@ export default function SaymanStore() {
                 <span style={{ fontFamily: "'Unbounded'", fontWeight: 700, fontSize: 16 }}>{o.num}</span>
                 <span style={{ color: "#999", fontSize: 13, marginLeft: 10 }}>{o.date ? o.date + " · " : ""}{o.time}</span>
               </div>
-              <button onClick={() => cycleAdminStatus(o.id, o.status)}
-                style={{ background: STATUS[o.status].color, color: "#fff", border: "none", borderRadius: 99, padding: "7px 16px", fontWeight: 700, fontSize: 13 }}>
-                {STATUS[o.status].label} →
-              </button>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => cycleAdminStatus(o.id, o.status)}
+                  style={{ background: STATUS[o.status].color, color: "#fff", border: "none", borderRadius: 99, padding: "7px 16px", fontWeight: 700, fontSize: 13 }}>
+                  {STATUS[o.status].label}{NEXT_STATUS[o.status] ? " → " + STATUS[NEXT_STATUS[o.status]].label : ""}
+                </button>
+                {!["done", "cancelled"].includes(o.status) && (
+                  <button onClick={() => cancelOrder(o.id)} title="Отменить заказ"
+                    style={{ background: "#FBE9E4", color: "#C7411A", border: "none", borderRadius: 99, padding: "7px 12px", fontWeight: 800, fontSize: 13 }}>✕</button>
+                )}
+              </div>
             </div>
             <div style={{ fontSize: 14, color: "#555", marginTop: 8, lineHeight: 1.7 }}>
               👤 {o.name} · 📞 {o.phone}<br />
@@ -618,8 +802,8 @@ export default function SaymanStore() {
             </div>
             <div style={{ borderTop: "1px dashed #eee", marginTop: 10, paddingTop: 10, fontSize: 14 }}>
               {(o.items || []).map((i, idx) => (
-                <div key={idx} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
-                  <span>{i.emoji} {i.name} × {i.qty}</span><span style={{ fontWeight: 600 }}>{fmt(i.qty * i.price)}</span>
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", opacity: i.missing ? 0.45 : 1, textDecoration: i.missing ? "line-through" : "none" }}>
+                  <span>{i.emoji} {i.name} × {i.qty}{i.missing ? " (нет)" : ""}</span><span style={{ fontWeight: 600 }}>{fmt(i.qty * i.price)}</span>
                 </div>
               ))}
               <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, marginTop: 6, fontSize: 15 }}>
@@ -767,11 +951,11 @@ export default function SaymanStore() {
             🔄 Повторить прошлый заказ ({orders[0].items.length} поз. на {fmt(orders[0].total)})
           </button>
         )}
-        {sort !== "promo" && category === "Все" && !search && products.some((p) => p.oldPrice) && (
+        {sort !== "promo" && category === "Все" && !search && products.some((p) => p.oldPrice && p.available !== false) && (
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 8 }}>🔥 Акции недели</div>
             <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
-              {products.filter((p) => p.oldPrice).map((p) => (
+              {products.filter((p) => p.oldPrice && p.available !== false).map((p) => (
                 <div key={"promo-" + p.id} style={{ minWidth: 200, background: "#fff", borderRadius: 14, padding: 12, display: "flex", alignItems: "center", gap: 10, border: "1.5px solid #f3d9c8" }}>
                   <div style={{ fontSize: 30 }}>{p.emoji}</div>
                   <div style={{ flex: 1 }}>
@@ -811,7 +995,9 @@ export default function SaymanStore() {
                   ) : null}
                   <span style={{ fontSize: 44, display: p.img ? "none" : "block" }}>{p.emoji}</span>
                 </div>
-                <div style={{ fontSize: 11.5, color: "#999", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginTop: 10 }}>{p.cat}</div>
+                <div style={{ fontSize: 11.5, color: "#999", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginTop: 10 }}>
+                  {p.cat}{p._sec && p._sec !== mode ? (p._sec === "food" ? " · Продукты" : " · Стройка") : ""}
+                </div>
                 <div style={{ fontWeight: 700, fontSize: 14.5, marginTop: 4, lineHeight: 1.35, flex: 1 }}>{p.name}</div>
                 <div style={{ marginTop: 8 }}>
                   {p.oldPrice && <span style={{ fontSize: 13, color: "#aaa", textDecoration: "line-through", marginRight: 6 }}>{fmt(p.oldPrice)}</span>}
