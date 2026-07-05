@@ -284,6 +284,9 @@ export default function SaymanStore() {
   const [staffPin, setStaffPin] = useState("");
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [staffRole, setStaffRole] = useState("");
+  const [staffName, setStaffName] = useState("");
+  const [staffList, setStaffList] = useState([]);
+  const [staffDraft, setStaffDraft] = useState({ name: "", role: "picker", pin: "" });
   const [pickState, setPickState] = useState({});
   const [myOrders, setMyOrders] = useState([]);
   const [myLoading, setMyLoading] = useState(false);
@@ -352,6 +355,7 @@ export default function SaymanStore() {
   useEffect(() => {
     if (staffAuth && staffRole === "admin" && adminTab === "settings") {
       rpc("admin_get_promos", { _pin: staffPin }).then(setPromos).catch(() => {});
+      rpc("admin_get_staff", { _pin: staffPin }).then(setStaffList).catch(() => {});
     }
   }, [staffAuth, staffRole, adminTab, staffPin]);
   useEffect(() => {
@@ -380,6 +384,7 @@ export default function SaymanStore() {
   const loadAdminOrders = async (pin) => {
     const res = await rpc("staff_login", { _pin: pin });
     setStaffRole(res.role);
+    setStaffName(res.name || "");
     setAdminOrders((res.orders || []).map(mapOrderRow));
     return res.role;
   };
@@ -427,8 +432,16 @@ export default function SaymanStore() {
   };
 
   const setOrderStatus = (id, status) => {
-    rpc("staff_set_status", { _pin: staffPin, _id: id, _status: status }).catch(dbFail);
-    setAdminOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+    rpc("staff_set_status", { _pin: staffPin, _id: id, _status: status }).catch((e) => {
+      const m = String(e.message || "");
+      alert(m.includes("уже") ? m.replace(/.*message":"([^"]+)".*/, "$1") : "Не удалось сохранить — обновите список");
+      loadAdminOrders(staffPin).catch(() => {});
+    });
+    setAdminOrders((prev) => prev.map((o) => (o.id === id ? {
+      ...o, status,
+      picker: status === "picking" && staffRole === "picker" ? staffName : o.picker,
+      courier: status === "delivering" && staffRole === "courier" ? staffName : o.courier,
+    } : o)));
   };
   const cycleAdminStatus = (id, cur) => {
     const next = NEXT_STATUS[cur];
@@ -651,7 +664,16 @@ export default function SaymanStore() {
     );
     // ── Экран СБОРЩИКА ──
     if (staffRole === "picker") {
-      const active = adminOrders.filter((o) => ["new", "accepted", "picking"].includes(o.status));
+      const active = adminOrders
+        .filter((o) => ["new", "accepted", "picking"].includes(o.status) && (!o.picker || o.picker === staffName))
+        .sort((a, b) => {
+          const ua = (a.slot || "").startsWith("Ближайшее") ? 0 : 1;
+          const ub = (b.slot || "").startsWith("Ближайшее") ? 0 : 1;
+          if (ua !== ub) return ua - ub;
+          return new Date(a.created_at) - new Date(b.created_at);
+        });
+      const catOf = (i) => (allProducts.find((x) => x.id === i.id) || {}).cat || "Прочее";
+      const waitMin = (o) => Math.floor((Date.now() - new Date(o.created_at)) / 60000);
       return (
         <div style={S.page}>
           <style>{FONTS}</style>
@@ -660,28 +682,38 @@ export default function SaymanStore() {
               <div style={{ fontFamily: "'Unbounded'", fontWeight: 900, fontSize: 17 }}>🧺 СБОРКА ЗАКАЗОВ</div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => loadAdminOrders(staffPin).catch(() => {})} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>⟳</button>
-                <button onClick={() => { setStaffAuth(false); setStaffPin(""); setStaffRole(""); setScreen("shop"); }} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>Выйти</button>
+                <button onClick={() => { setStaffAuth(false); setStaffPin(""); setStaffRole(""); setStaffName(""); setScreen("shop"); }} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>Выйти</button>
               </div>
             </div>
           </header>
           <div style={{ ...S.wrap, maxWidth: 640, paddingTop: 20, paddingBottom: 60 }}>
+            <div style={{ fontSize: 13.5, color: "#888", marginBottom: 12 }}>👋 {staffName} · показаны свободные заказы и ваши</div>
             {active.length === 0 && (
               <div style={{ textAlign: "center", padding: 60, color: "#888", background: "#fff", borderRadius: 16 }}>
                 <div style={{ fontSize: 40 }}>✅</div>
-                <p style={{ marginTop: 10 }}>Все заказы собраны. Новые появятся здесь — нажимайте ⟳ для проверки.</p>
+                <p style={{ marginTop: 10 }}>Все заказы собраны. Новые появятся здесь автоматически.</p>
               </div>
             )}
             {active.map((o) => {
               const st = pickState[o.id] || { col: {}, miss: {} };
               const allTouched = (o.items || []).every((_, idx) => st.col[idx] || st.miss[idx]);
+              const urgent = o.status !== "picking" && waitMin(o) > 15;
+              const groups = {};
+              (o.items || []).forEach((i, idx) => { const c = catOf(i); (groups[c] = groups[c] || []).push([i, idx]); });
               return (
-                <div key={o.id} style={{ background: "#fff", borderRadius: 16, padding: 18, marginBottom: 14 }}>
+                <div key={o.id} style={{ background: "#fff", borderRadius: 16, padding: 18, marginBottom: 14, border: urgent ? "2px solid #C7411A" : "none" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                     <div>
                       <span style={{ fontFamily: "'Unbounded'", fontWeight: 700, fontSize: 16 }}>{o.num}</span>
                       <span style={{ background: STATUS[o.status].color, color: "#fff", borderRadius: 99, padding: "4px 12px", fontSize: 12, fontWeight: 800, marginLeft: 10 }}>{STATUS[o.status].label}</span>
                     </div>
-                    <span style={{ fontSize: 13, color: "#888" }}>{o.time} · {o.type === "delivery" ? "🚚 " + (o.slot || "Доставка") : "🏪 Самовывоз"}</span>
+                    <span style={{ fontSize: 13, color: "#888" }}>
+                      {o.time} · {o.type === "delivery" ? "🚚 " + (o.slot || "Доставка") : "🏪 Самовывоз"}
+                      {urgent && <b style={{ color: "#C7411A" }}> · ждёт {waitMin(o)} мин!</b>}
+                      {o.status === "picking" && o.status_log && o.status_log.picking && <> · ⏱ в сборке с {String(o.status_log.picking).slice(11)}</>}
+                    </span>
+                    <button onClick={() => printOrder(o)} title="Печать листа"
+                      style={{ background: "#f2f1ed", border: "none", borderRadius: 10, padding: "8px 12px", fontSize: 15 }}>🖨</button>
                   </div>
                   {o.comment && <div style={{ fontSize: 13.5, color: "#7A5200", background: "#FBF1E1", borderRadius: 10, padding: "8px 12px", marginTop: 10 }}>💬 {o.comment}</div>}
                   {o.status !== "picking" ? (
@@ -691,7 +723,10 @@ export default function SaymanStore() {
                   ) : (
                     <>
                       <div style={{ marginTop: 12 }}>
-                        {(o.items || []).map((i, idx) => (
+                        {Object.entries(groups).map(([g, arr]) => (
+                          <div key={g}>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: "#999", textTransform: "uppercase", letterSpacing: 0.5, padding: "10px 0 2px" }}>{g}</div>
+                            {arr.map(([i, idx]) => (
                           <div key={idx} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid #f4f3ef", opacity: st.miss[idx] ? 0.5 : 1 }}>
                             {(() => { const pr = allProducts.find((x) => x.id === i.id); return (
                               <div style={{ width: 40, height: 40, borderRadius: 10, background: "#F6F5F2", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, overflow: "hidden", flexShrink: 0 }}>
@@ -708,7 +743,12 @@ export default function SaymanStore() {
                             <button onClick={() => togglePickItem(o.id, idx, "miss")}
                               style={{ borderRadius: 10, border: "none", fontSize: 12, fontWeight: 800, padding: "9px 10px", background: st.miss[idx] ? "#C7411A" : "#f2f1ed", color: st.miss[idx] ? "#fff" : "#999", flexShrink: 0 }}>нет</button>
                           </div>
+                            ))}
+                          </div>
                         ))}
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, fontSize: 16, marginTop: 12, padding: "10px 0", borderTop: "2px solid #f0efe9" }}>
+                        <span>{(o.items || []).length} поз.</span><span>{fmt(o.total)}</span>
                       </div>
                       <button onClick={() => finishPick(o)} disabled={!allTouched}
                         style={{ ...S.btn(allTouched ? "#1E7A46" : "#ccc"), width: "100%", marginTop: 14, padding: 15 }}>
@@ -726,7 +766,12 @@ export default function SaymanStore() {
 
     // ── Экран КУРЬЕРА ──
     if (staffRole === "courier") {
-      const active = adminOrders.filter((o) => ["picked", "delivering"].includes(o.status) && o.type === "delivery");
+      const active = adminOrders
+        .filter((o) => o.type === "delivery" && (
+          (o.status === "picked" && (!o.courier || o.courier === staffName)) ||
+          (o.status === "delivering" && o.courier === staffName)
+        ))
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       return (
         <div style={S.page}>
           <style>{FONTS}</style>
@@ -735,11 +780,12 @@ export default function SaymanStore() {
               <div style={{ fontFamily: "'Unbounded'", fontWeight: 900, fontSize: 17 }}>🛵 ДОСТАВКА</div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => loadAdminOrders(staffPin).catch(() => {})} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>⟳</button>
-                <button onClick={() => { setStaffAuth(false); setStaffPin(""); setStaffRole(""); setScreen("shop"); }} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>Выйти</button>
+                <button onClick={() => { setStaffAuth(false); setStaffPin(""); setStaffRole(""); setStaffName(""); setScreen("shop"); }} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>Выйти</button>
               </div>
             </div>
           </header>
           <div style={{ ...S.wrap, maxWidth: 560, paddingTop: 20, paddingBottom: 60 }}>
+            <div style={{ fontSize: 13.5, color: "#888", marginBottom: 12 }}>👋 {staffName} · свободные доставки и ваши</div>
             {active.length === 0 && (
               <div style={{ textAlign: "center", padding: 60, color: "#888", background: "#fff", borderRadius: 16 }}>
                 <div style={{ fontSize: 40 }}>🛵</div>
@@ -755,7 +801,7 @@ export default function SaymanStore() {
                 <div style={{ fontSize: 15, marginTop: 12, lineHeight: 1.7 }}>
                   <b>📍 {o.address}</b><br />
                   {o.slot && <>🕒 <b>{o.slot}</b><br /></>}
-                  👤 {o.name}
+                  👤 {o.name}{o.picker && <span style={{ color: "#999", fontSize: 13 }}> · собрал: {o.picker}</span>}
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                   <a href={"tel:+" + String(o.phone || "").replace(/\D/g, "")} style={{ ...S.btn("#1B1B18"), flex: 1, textAlign: "center", textDecoration: "none", padding: 13 }}>📞 Позвонить</a>
@@ -782,7 +828,7 @@ export default function SaymanStore() {
         <div style={{ ...S.wrap, display: "flex", alignItems: "center", justifyContent: "space-between", height: 60, flexWrap: "wrap" }}>
           <div style={{ fontFamily: "'Unbounded'", fontWeight: 900, fontSize: 18 }}>САЙМАН · админ</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => { setStaffAuth(false); setStaffPin(""); setStaffRole(""); setScreen("shop"); }} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>Выйти</button>
+            <button onClick={() => { setStaffAuth(false); setStaffPin(""); setStaffRole(""); setStaffName(""); setScreen("shop"); }} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>Выйти</button>
             <button onClick={() => setScreen("shop")} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>← В магазин</button>
           </div>
         </div>
@@ -847,7 +893,7 @@ export default function SaymanStore() {
         rpc("admin_set_settings", { _pin: staffPin, _s: settings }).then(() => alert("Настройки сохранены — уже действуют для всех клиентов")).catch(dbFail);
       };
       const savePins = () => {
-        if (!pinsDraft.a && !pinsDraft.p && !pinsDraft.c) return alert("Введите хотя бы один новый PIN");
+        if (!pinsDraft.a) return alert("Введите новый PIN админа");
         rpc("admin_set_pins", { _pin: staffPin, _admin: pinsDraft.a, _picker: pinsDraft.p, _courier: pinsDraft.c })
           .then(() => { alert("PIN-коды обновлены. Запишите их! При следующем входе действуют новые."); if (pinsDraft.a) setStaffPin(pinsDraft.a); setPinsDraft({ a: "", p: "", c: "" }); })
           .catch(dbFail);
@@ -891,15 +937,53 @@ export default function SaymanStore() {
             </div>
 
             <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginTop: 16 }}>
-              <div style={{ fontWeight: 800, fontSize: 16 }}>PIN-коды персонала</div>
-              <p style={{ fontSize: 12.5, color: "#999", marginTop: 4 }}>Заполните только те, что хотите сменить. Пустое поле — PIN остаётся прежним.</p>
-              <label style={lbl}>Новый PIN админа</label>
+              <div style={{ fontWeight: 800, fontSize: 16 }}>PIN админа</div>
+              <label style={lbl}>Новый PIN админа (пусто — без изменений)</label>
               <input style={inp} value={pinsDraft.a} onChange={(e) => setPinsDraft({ ...pinsDraft, a: e.target.value.trim() })} placeholder="например 4815" />
-              <label style={lbl}>Новый PIN сборщика</label>
-              <input style={inp} value={pinsDraft.p} onChange={(e) => setPinsDraft({ ...pinsDraft, p: e.target.value.trim() })} placeholder="например 1623" />
-              <label style={lbl}>Новый PIN курьера</label>
-              <input style={inp} value={pinsDraft.c} onChange={(e) => setPinsDraft({ ...pinsDraft, c: e.target.value.trim() })} placeholder="например 4248" />
-              <button onClick={savePins} style={{ ...S.btn("#1B1B18"), width: "100%", marginTop: 16, padding: 14 }}>Сменить PIN-коды</button>
+              <button onClick={savePins} style={{ ...S.btn("#1B1B18"), width: "100%", marginTop: 16, padding: 14 }}>Сменить PIN админа</button>
+            </div>
+
+            <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginTop: 16 }}>
+              <div style={{ fontWeight: 800, fontSize: 16 }}>👥 Команда: сборщики и курьеры</div>
+              <p style={{ fontSize: 12.5, color: "#999", marginTop: 4 }}>У каждого сотрудника своё имя и PIN. Сборщик видит только свободные заказы и свои; заказ, взятый одним, закрыт для других. В карточке заказа видно, кто собрал и кто доставил.</p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                <input style={{ ...inp, marginTop: 0, flex: "2 1 130px" }} placeholder="Имя" value={staffDraft.name}
+                  onChange={(e) => setStaffDraft({ ...staffDraft, name: e.target.value })} />
+                <select style={{ ...inp, marginTop: 0, width: 130 }} value={staffDraft.role} onChange={(e) => setStaffDraft({ ...staffDraft, role: e.target.value })}>
+                  <option value="picker">🧺 Сборщик</option>
+                  <option value="courier">🛵 Курьер</option>
+                </select>
+                <input style={{ ...inp, marginTop: 0, width: 110 }} placeholder="PIN" value={staffDraft.pin}
+                  onChange={(e) => setStaffDraft({ ...staffDraft, pin: e.target.value.trim() })} />
+                <button style={{ ...S.btn("#1E7A46"), padding: "11px 16px", fontSize: 14 }}
+                  onClick={() => {
+                    if (!staffDraft.name.trim() || staffDraft.pin.length < 4) return alert("Укажите имя и PIN (минимум 4 цифры)");
+                    rpc("admin_upsert_staff", { _pin: staffPin, _s: staffDraft })
+                      .then(() => rpc("admin_get_staff", { _pin: staffPin }).then(setStaffList))
+                      .then(() => setStaffDraft({ name: "", role: "picker", pin: "" }))
+                      .catch(() => alert("Не сохранилось. Возможно, такой PIN уже занят."));
+                  }}>Добавить</button>
+              </div>
+              {staffList.map((s) => (
+                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid #f4f3ef", flexWrap: "wrap", opacity: s.active ? 1 : 0.5 }}>
+                  <span style={{ fontSize: 17 }}>{s.role === "picker" ? "🧺" : "🛵"}</span>
+                  <b style={{ fontSize: 14.5 }}>{s.name}</b>
+                  <span style={{ fontSize: 13, color: "#888" }}>PIN: {s.pin}</span>
+                  <label style={{ marginLeft: "auto", fontSize: 12.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                    <input type="checkbox" checked={s.active}
+                      onChange={(e) => rpc("admin_upsert_staff", { _pin: staffPin, _s: { ...s, active: e.target.checked } })
+                        .then(() => setStaffList(staffList.map((x) => x.id === s.id ? { ...x, active: e.target.checked } : x)))
+                        .catch(dbFail)}
+                      style={{ width: 17, height: 17, accentColor: "#1E7A46" }} />
+                    работает
+                  </label>
+                  <button onClick={() => {
+                    if (!window.confirm("Удалить " + s.name + " из команды?")) return;
+                    rpc("admin_delete_staff", { _pin: staffPin, _id: s.id })
+                      .then(() => setStaffList(staffList.filter((x) => x.id !== s.id))).catch(dbFail);
+                  }} style={{ background: "#FBE9E4", border: "none", borderRadius: 8, padding: "7px 10px", fontSize: 13 }}>🗑️</button>
+                </div>
+              ))}
             </div>
 
             <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginTop: 16 }}>
@@ -1269,6 +1353,7 @@ export default function SaymanStore() {
               👤 {o.name} · 📞 {o.phone}<br />
               {o.type === "delivery" ? "🚚 Доставка: " + o.address : "🏪 Самовывоз"} · {o.pay === "kaspi" ? "Kaspi" : "Наличные"}
               {o.slot && <> · 🕒 {o.slot}</>}{o.zone && <> · {o.zone}</>}
+              {(o.picker || o.courier) && <><br />{o.picker && <>🧺 {o.picker}</>}{o.picker && o.courier && " · "}{o.courier && <>🛵 {o.courier}</>}</>}
               {o.comment && <><br />💬 {o.comment}</>}
             </div>
             <div style={{ borderTop: "1px dashed #eee", marginTop: 10, paddingTop: 10, fontSize: 14 }}>
