@@ -543,6 +543,11 @@ export default function SaymanStore() {
                       <div style={{ marginTop: 12 }}>
                         {(o.items || []).map((i, idx) => (
                           <div key={idx} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid #f4f3ef", opacity: st.miss[idx] ? 0.5 : 1 }}>
+                            {(() => { const pr = allProducts.find((x) => x.id === i.id); return (
+                              <div style={{ width: 40, height: 40, borderRadius: 10, background: "#F6F5F2", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, overflow: "hidden", flexShrink: 0 }}>
+                                {pr?.img ? <img src={pr.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (pr?.emoji || i.emoji || "🛒")}
+                              </div>
+                            ); })()}
                             <button onClick={() => togglePickItem(o.id, idx, "col")}
                               style={{ width: 34, height: 34, borderRadius: 10, border: "none", fontSize: 17, background: st.col[idx] ? "#1E7A46" : "#f2f1ed", color: st.col[idx] ? "#fff" : "#999", flexShrink: 0 }}>✓</button>
                             <div style={{ flex: 1, fontSize: 14.5, fontWeight: 700, textDecoration: st.miss[idx] ? "line-through" : "none" }}>
@@ -801,6 +806,7 @@ export default function SaymanStore() {
     if (adminTab === "products") {
       const inp = { padding: "8px 10px", borderRadius: 10, border: "1.5px solid #ddd", fontSize: 14, background: "#fff" };
       const secTheme = THEMES[adminSection];
+      const sectionCats = [...new Set(productsData[adminSection].map((p) => p.cat))].filter(Boolean);
       return (
         <div style={S.page}>
           <style>{FONTS}</style>
@@ -824,7 +830,18 @@ export default function SaymanStore() {
                 <div style={{ fontWeight: 800, marginBottom: 10 }}>Новый товар → {secTheme.label}</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <input style={{ ...inp, flex: "2 1 180px" }} placeholder="Название" value={newProd.name} onChange={(e) => setNewProd({ ...newProd, name: e.target.value })} />
-                  <input style={{ ...inp, flex: "1 1 130px" }} placeholder="Категория" value={newProd.cat} onChange={(e) => setNewProd({ ...newProd, cat: e.target.value })} />
+                  <select style={{ ...inp, flex: "1 1 150px" }} value={newProd.catNew ? "__new__" : newProd.cat}
+                    onChange={(e) => e.target.value === "__new__"
+                      ? setNewProd({ ...newProd, cat: "", catNew: true })
+                      : setNewProd({ ...newProd, cat: e.target.value, catNew: false })}>
+                    <option value="">— выберите отдел —</option>
+                    {sectionCats.map((c) => <option key={c} value={c}>{c}</option>)}
+                    <option value="__new__">➕ Новая категория…</option>
+                  </select>
+                  {newProd.catNew && (
+                    <input style={{ ...inp, flex: "1 1 150px" }} placeholder="Название новой категории" autoFocus
+                      value={newProd.cat} onChange={(e) => setNewProd({ ...newProd, cat: e.target.value })} />
+                  )}
                   <input style={{ ...inp, width: 100 }} type="number" placeholder="Цена ₸" value={newProd.price} onChange={(e) => setNewProd({ ...newProd, price: e.target.value })} />
                   <input style={{ ...inp, width: 70 }} placeholder="ед." value={newProd.unit} onChange={(e) => setNewProd({ ...newProd, unit: e.target.value })} />
                   <input style={{ ...inp, width: 60 }} placeholder="🛒" value={newProd.emoji} onChange={(e) => setNewProd({ ...newProd, emoji: e.target.value })} />
@@ -833,6 +850,7 @@ export default function SaymanStore() {
                   <button style={{ ...S.btn(secTheme.accent), padding: "10px 18px", fontSize: 14 }}
                     onClick={() => {
                       if (!newProd.name.trim() || !Number(newProd.price)) return alert("Укажите название и цену");
+                      if (!newProd.cat.trim()) return alert("Выберите отдел (категорию) или создайте новый");
                       addProduct(adminSection, { name: newProd.name.trim(), cat: newProd.cat.trim() || "Разное", price: Number(newProd.price), unit: newProd.unit || "шт", emoji: newProd.emoji || "🛒" });
                       setNewProd(null);
                     }}>Сохранить</button>
@@ -847,6 +865,7 @@ export default function SaymanStore() {
 
             <input value={prodSearch} onChange={(e) => setProdSearch(e.target.value)} placeholder="Поиск товара по названию или категории…"
               style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1.5px solid #e2e0da", fontSize: 14.5, background: "#fff", marginBottom: 12 }} />
+            <datalist id="sayman-cats">{sectionCats.map((c) => <option key={c} value={c} />)}</datalist>
             {productsData[adminSection].filter((p) =>
               (p.name + " " + p.cat).toLowerCase().includes(prodSearch.toLowerCase().trim())
             ).map((p) => (
@@ -859,7 +878,7 @@ export default function SaymanStore() {
                   <input key={p.id + p.name} defaultValue={p.name} onBlur={(e) => e.target.value.trim() && updateProduct(adminSection, p.id, { name: e.target.value.trim() })}
                     style={{ ...inp, width: "100%", fontWeight: 700, border: "1.5px solid transparent", padding: "6px 8px" }} />
                   <div style={{ display: "flex", alignItems: "center", gap: 4, paddingLeft: 4 }}>
-                    <input key={p.id + "-cat" + p.cat} defaultValue={p.cat}
+                    <input key={p.id + "-cat" + p.cat} defaultValue={p.cat} list="sayman-cats"
                       onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== p.cat && updateProduct(adminSection, p.id, { cat: e.target.value.trim() })}
                       title="Категория товара — можно переименовать"
                       style={{ fontSize: 11.5, color: "#999", border: "1px solid transparent", borderRadius: 6, padding: "2px 4px", width: 130, background: "transparent" }} />
