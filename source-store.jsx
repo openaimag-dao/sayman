@@ -110,6 +110,79 @@ const THEMES = {
   },
 };
 
+const I18N = {
+  ru: {
+    sec_food: "Продукты", sec_build: "Стройматериалы",
+    tag_food: "Свежее — каждый день", tag_build: "Всё для стройки и ремонта",
+    heroA: "Доставка по Шымкенту от 60 минут · бесплатно от ", heroB: "",
+    closed1: "🌙 Магазин сейчас закрыт", closed2: "Заказ можно оформить — соберём в рабочее время.",
+    searchIn: "Поиск в разделе", all: "Все",
+    sort: "Сортировка:", sort_default: "По порядку", sort_promo: "🔥 Акции и хиты", sort_cheap: "Дешевле", sort_exp: "Дороже",
+    promoWeek: "🔥 Акции недели", repeatLast: "🔄 Повторить прошлый заказ",
+    toCart: "В корзину", notFound: "Ничего не нашлось. Попробуйте изменить запрос или позвоните нам — подберём вручную.",
+    checkout: "оформить", cart: "Корзина", cartEmpty: "Пока пусто. Добавьте товары из каталога.",
+    toFree: "до бесплатной доставки", total: "Итого", makeOrder: "Оформить заказ",
+    coTitle: "Оформление заказа", name: "Ваше имя", phone: "Телефон",
+    getType: "Способ получения", delivery: "Доставка", pickup: "Самовывоз",
+    address: "Адрес доставки", zoneL: "Район доставки", slotL: "Время доставки",
+    asap: "Ближайшее время (60–90 мин)", today: "Сегодня", tomorrow: "Завтра",
+    pickupNote: "📍 Магазин «Сайман», г. Шымкент, ул. Байтерекова, 9а. Заказ будет готов через 30–40 минут.",
+    pay: "Оплата", cash: "Наличные", kaspi: "Kaspi перевод / QR",
+    comment: "Комментарий к заказу", commentPh: "Например: позвонить за 10 минут",
+    confirm: "Подтвердить заказ", items: "Товары", free: "бесплатно", freeFrom: "бесплатно от",
+    done: "Заказ принят!", yourNum: "Номер вашего заказа",
+    doneDelivery: "Курьер свяжется с вами по телефону для уточнения времени доставки.",
+    donePickup: "Заказ можно забрать в магазине «Сайман» через 30–40 минут. Мы позвоним, когда всё будет готово.",
+    sendWa: "💬 Отправить заказ в WhatsApp магазина",
+    waNote: "Нажмите, чтобы продублировать заказ в WhatsApp — так магазин увидит его мгновенно",
+    back: "Вернуться в магазин", backShort: "← В магазин", backCatalog: "← Назад в каталог",
+    myOrders: "Мои заказы", myNote: "История сохраняется на этом устройстве",
+    noOrders: "Заказов с этого устройства пока не было. Оформите первый — и он появится здесь со статусом.",
+    repeat: "🔄 Повторить", refreshSt: "⟳ Обновить статусы", myData: "Мои данные",
+    myDataNote: "Подставляются автоматически при оформлении", save: "Сохранить",
+    saved: "Данные сохранены — при заказе будут подставляться сами",
+    footerTag: "Продукты и стройматериалы рядом с домом", daily: "Ежедневно",
+    privacy: "Политика конфиденциальности", loading: "Загружаю…",
+    st_new: "Новый", st_accepted: "Принят", st_picking: "Сборка", st_picked: "Собран",
+    st_delivering: "В пути", st_done: "Доставлен", st_cancelled: "Отменён",
+  },
+  kk: {
+    sec_food: "Азық-түлік", sec_build: "Құрылыс материалдары",
+    tag_food: "Күн сайын жаңа өнімдер", tag_build: "Құрылыс пен жөндеуге барлығы",
+    heroA: "Шымкент бойынша жеткізу 60 минуттан · ", heroB: " бастап тегін",
+    closed1: "🌙 Дүкен қазір жабық", closed2: "Тапсырыс беруге болады — жұмыс уақытында жинаймыз.",
+    searchIn: "Іздеу бөлімі:", all: "Барлығы",
+    sort: "Сұрыптау:", sort_default: "Рет бойынша", sort_promo: "🔥 Акциялар мен хиттер", sort_cheap: "Арзанырақ", sort_exp: "Қымбатырақ",
+    promoWeek: "🔥 Апта акциялары", repeatLast: "🔄 Өткен тапсырысты қайталау",
+    toCart: "Себетке", notFound: "Ештеңе табылмады. Сұранысты өзгертіп көріңіз немесе бізге қоңырау шалыңыз.",
+    checkout: "рәсімдеу", cart: "Себет", cartEmpty: "Себет бос. Каталогтан тауар қосыңыз.",
+    toFree: "тегін жеткізуге дейін", total: "Жиыны", makeOrder: "Тапсырыс беру",
+    coTitle: "Тапсырысты рәсімдеу", name: "Атыңыз", phone: "Телефон",
+    getType: "Алу тәсілі", delivery: "Жеткізу", pickup: "Өзім алып кетем",
+    address: "Жеткізу мекенжайы", zoneL: "Жеткізу ауданы", slotL: "Жеткізу уақыты",
+    asap: "Мүмкіндігінше тез (60–90 мин)", today: "Бүгін", tomorrow: "Ертең",
+    pickupNote: "📍 «Сайман» дүкені, Шымкент қ., Байтереков к-сі, 9а. Тапсырыс 30–40 минутта дайын болады.",
+    pay: "Төлем", cash: "Қолма-қол", kaspi: "Kaspi аударым / QR",
+    comment: "Тапсырысқа түсініктеме", commentPh: "Мысалы: 10 минут бұрын қоңырау шалу",
+    confirm: "Тапсырысты растау", items: "Тауарлар", free: "тегін", freeFrom: "тегін жеткізу:",
+    done: "Тапсырыс қабылданды!", yourNum: "Тапсырыс нөміріңіз",
+    doneDelivery: "Курьер жеткізу уақытын нақтылау үшін сізге қоңырау шалады.",
+    donePickup: "Тапсырысты «Сайман» дүкенінен 30–40 минуттан кейін алуға болады. Дайын болғанда қоңырау шаламыз.",
+    sendWa: "💬 Тапсырысты дүкеннің WhatsApp-ына жіберу",
+    waNote: "Басыңыз — тапсырыс WhatsApp арқылы да кетеді, дүкен оны бірден көреді",
+    back: "Дүкенге оралу", backShort: "← Дүкенге", backCatalog: "← Каталогқа",
+    myOrders: "Менің тапсырыстарым", myNote: "Тарих осы құрылғыда сақталады",
+    noOrders: "Бұл құрылғыдан әлі тапсырыс болған жоқ. Алғашқысын рәсімдеңіз — ол осында статусымен көрінеді.",
+    repeat: "🔄 Қайталау", refreshSt: "⟳ Статустарды жаңарту", myData: "Менің деректерім",
+    myDataNote: "Рәсімдеу кезінде автоматты түрде қойылады", save: "Сақтау",
+    saved: "Деректер сақталды — тапсырыс кезінде өздігінен қойылады",
+    footerTag: "Үйге жақын азық-түлік пен құрылыс материалдары", daily: "Күн сайын",
+    privacy: "Құпиялылық саясаты", loading: "Жүктелуде…",
+    st_new: "Жаңа", st_accepted: "Қабылданды", st_picking: "Жиналуда", st_picked: "Жиналды",
+    st_delivering: "Жолда", st_done: "Жеткізілді", st_cancelled: "Бас тартылды",
+  },
+};
+
 const DEFAULT_SETTINGS = { delivery_fee: 700, free_from: 10000, min_order: 0, hours: "08:00 – 22:00", shop_open: true };
 const beep = () => {
   try {
@@ -152,6 +225,8 @@ const buildWaMsg = (o) => encodeURIComponent(
   "Имя: " + o.name + "\n" +
   "Телефон: " + o.phone + "\n" +
   (o.type === "delivery" ? "🚚 Доставка: " + o.address : "🏪 Самовывоз") + "\n" +
+  (o.slot ? "🕒 " + o.slot + "\n" : "") +
+  (o.zone ? "📍 Район: " + o.zone + "\n" : "") +
   "Оплата: " + (o.pay === "kaspi" ? "Kaspi" : "Наличные") + "\n" +
   (o.comment ? "Комментарий: " + o.comment + "\n" : "") +
   "───────────\n" +
@@ -179,7 +254,7 @@ export default function SaymanStore() {
   const [cart, setCart] = useState({}); // id -> qty
   const [cartOpen, setCartOpen] = useState(false);
   const [screen, setScreen] = useState("shop"); // shop | checkout | done
-  const [order, setOrder] = useState({ name: "", phone: "", type: "delivery", address: "", pay: "kaspi", comment: "" });
+  const [order, setOrder] = useState({ name: "", phone: "", type: "delivery", address: "", pay: "kaspi", comment: "", slot: "", zone: "" });
   const [orderNum, setOrderNum] = useState(null);
   const [orders, setOrders] = useState([]);
   const [lastOrder, setLastOrder] = useState(null);
@@ -203,6 +278,9 @@ export default function SaymanStore() {
   const [prodSearch, setProdSearch] = useState("");
   const [pinsDraft, setPinsDraft] = useState({ a: "", p: "", c: "" });
   const prevNewCount = useRef(0);
+  const [lang, setLang] = useState(() => { try { return localStorage.getItem("sayman-lang") || "ru"; } catch { return "ru"; } });
+  const t = (k) => (I18N[lang] && I18N[lang][k]) || I18N.ru[k] || k;
+  const switchLang = () => { const n = lang === "ru" ? "kk" : "ru"; setLang(n); try { localStorage.setItem("sayman-lang", n); } catch {} };
   const FREE_DELIVERY = settings.free_from;
   const DELIVERY_FEE = settings.delivery_fee;
 
@@ -369,7 +447,10 @@ export default function SaymanStore() {
     .map(([id, qty]) => ({ ...allProducts.find((p) => p.id === id), qty }));
   const cartCount = cartItems.reduce((s, i) => s + i.qty, 0);
   const cartTotal = cartItems.reduce((s, i) => s + i.qty * i.price, 0);
-  const deliveryFee = order.type === "delivery" && cartTotal < FREE_DELIVERY ? DELIVERY_FEE : 0;
+  const zonesArr = Array.isArray(settings.zones) ? settings.zones : [];
+  const curZone = order.zone || (zonesArr[0] && zonesArr[0].name) || "";
+  const zoneFee = (zonesArr.find((z) => z.name === curZone) || {}).fee ?? DELIVERY_FEE;
+  const deliveryFee = order.type === "delivery" && cartTotal < FREE_DELIVERY ? zoneFee : 0;
 
   const add = (id, d) => setCart((c) => ({ ...c, [id]: Math.max(0, (c[id] || 0) + d) }));
 
@@ -391,6 +472,8 @@ export default function SaymanStore() {
     sPost("orders", {
       num, name: order.name, phone: order.phone, type: order.type,
       address: order.address, pay: order.pay, comment: order.comment,
+      slot: order.type === "delivery" ? (order.slot || "") : null,
+      zone: order.type === "delivery" ? curZone : null,
       items: newOrder.items, total: newOrder.total, client_id: getClientId(),
     }, { Prefer: "return=minimal" }).catch(() => {});
     try { appStorage.set("sayman-customer", JSON.stringify({ name: order.name, phone: order.phone, address: order.address, type: order.type, pay: order.pay })); } catch {}
@@ -453,23 +536,21 @@ export default function SaymanStore() {
       <style>{FONTS}</style>
       <div style={{ ...S.wrap, maxWidth: 520, paddingTop: 80, textAlign: "center", animation: "fadeUp .4s ease" }}>
         <div style={{ fontSize: 64 }}>✅</div>
-        <h1 style={{ fontFamily: "'Unbounded'", fontSize: 26, margin: "16px 0 8px" }}>Заказ принят!</h1>
-        <p style={{ fontSize: 17, color: "#555" }}>Номер вашего заказа</p>
+        <h1 style={{ fontFamily: "'Unbounded'", fontSize: 26, margin: "16px 0 8px" }}>{t("done")}</h1>
+        <p style={{ fontSize: 17, color: "#555" }}>{t("yourNum")}</p>
         <div style={{ fontFamily: "'Unbounded'", fontSize: 34, fontWeight: 900, color: theme.accent, margin: "8px 0 20px" }}>{orderNum}</div>
         <p style={{ color: "#555", lineHeight: 1.6 }}>
-          {order.type === "delivery"
-            ? "Курьер свяжется с вами по телефону " + order.phone + " для уточнения времени доставки."
-            : "Заказ можно забрать в магазине «Сайман» через 30–40 минут. Мы позвоним, когда всё будет готово."}
+          {order.type === "delivery" ? t("doneDelivery") + " (" + order.phone + ")" : t("donePickup")}
         </p>
         {lastOrder && (
           <button style={{ ...S.btn("#25D366"), width: "100%", marginTop: 26, padding: 16, fontSize: 16 }}
             onClick={() => window.open("https://wa.me/" + WA_PHONE + "?text=" + buildWaMsg(lastOrder), "_blank")}>
-            💬 Отправить заказ в WhatsApp магазина
+            {t("sendWa")}
           </button>
         )}
-        <p style={{ fontSize: 13, color: "#999", marginTop: 10 }}>Нажмите, чтобы продублировать заказ в WhatsApp — так магазин увидит его мгновенно</p>
+        <p style={{ fontSize: 13, color: "#999", marginTop: 10 }}>{t("waNote")}</p>
         <button style={{ ...S.btn("#f2f1ed", "#1B1B18"), marginTop: 14 }} onClick={() => { setScreen("shop"); setOrder((o) => ({ ...o, comment: "" })); }}>
-          Вернуться в магазин
+          {t("back")}
         </button>
       </div>
     </div>
@@ -531,7 +612,7 @@ export default function SaymanStore() {
                       <span style={{ fontFamily: "'Unbounded'", fontWeight: 700, fontSize: 16 }}>{o.num}</span>
                       <span style={{ background: STATUS[o.status].color, color: "#fff", borderRadius: 99, padding: "4px 12px", fontSize: 12, fontWeight: 800, marginLeft: 10 }}>{STATUS[o.status].label}</span>
                     </div>
-                    <span style={{ fontSize: 13, color: "#888" }}>{o.time} · {o.type === "delivery" ? "🚚 Доставка" : "🏪 Самовывоз"}</span>
+                    <span style={{ fontSize: 13, color: "#888" }}>{o.time} · {o.type === "delivery" ? "🚚 " + (o.slot || "Доставка") : "🏪 Самовывоз"}</span>
                   </div>
                   {o.comment && <div style={{ fontSize: 13.5, color: "#7A5200", background: "#FBF1E1", borderRadius: 10, padding: "8px 12px", marginTop: 10 }}>💬 {o.comment}</div>}
                   {o.status !== "picking" ? (
@@ -604,6 +685,7 @@ export default function SaymanStore() {
                 </div>
                 <div style={{ fontSize: 15, marginTop: 12, lineHeight: 1.7 }}>
                   <b>📍 {o.address}</b><br />
+                  {o.slot && <>🕒 <b>{o.slot}</b><br /></>}
                   👤 {o.name}
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -720,6 +802,22 @@ export default function SaymanStore() {
                 <input type="checkbox" checked={settings.shop_open} onChange={(e) => setSettings({ ...settings, shop_open: e.target.checked })} style={{ width: 20, height: 20, accentColor: "#1E7A46" }} />
                 Магазин открыт (снимите на ночь/выходной — клиенты увидят предупреждение)
               </label>
+              <div style={{ fontWeight: 800, fontSize: 15, marginTop: 20 }}>Зоны доставки и тарифы</div>
+              <p style={{ fontSize: 12.5, color: "#999", marginTop: 2 }}>Клиент выбирает свой район при оформлении — доставка считается по тарифу зоны (бесплатная от порога действует для всех зон)</p>
+              {(Array.isArray(settings.zones) ? settings.zones : []).map((z, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <input style={{ ...inp, marginTop: 0, flex: 2 }} value={z.name} placeholder="Название зоны"
+                    onChange={(e) => { const zs = [...settings.zones]; zs[i] = { ...zs[i], name: e.target.value }; setSettings({ ...settings, zones: zs }); }} />
+                  <input style={{ ...inp, marginTop: 0, width: 110 }} type="number" value={z.fee} placeholder="₸"
+                    onChange={(e) => { const zs = [...settings.zones]; zs[i] = { ...zs[i], fee: Number(e.target.value) || 0 }; setSettings({ ...settings, zones: zs }); }} />
+                  <button onClick={() => setSettings({ ...settings, zones: settings.zones.filter((_, j) => j !== i) })}
+                    style={{ background: "#FBE9E4", color: "#C7411A", border: "none", borderRadius: 10, padding: "0 13px", fontWeight: 800 }}>✕</button>
+                </div>
+              ))}
+              {(!settings.zones || settings.zones.length < 6) && (
+                <button onClick={() => setSettings({ ...settings, zones: [...(settings.zones || []), { name: "", fee: 700 }] })}
+                  style={{ ...S.btn("#f2f1ed", "#444"), marginTop: 10, padding: "10px 16px", fontSize: 13.5 }}>➕ Добавить зону</button>
+              )}
               <button onClick={saveSettings} style={{ ...S.btn("#1E7A46"), width: "100%", marginTop: 16, padding: 14 }}>Сохранить настройки</button>
             </div>
 
@@ -995,6 +1093,7 @@ export default function SaymanStore() {
             <div style={{ fontSize: 14, color: "#555", marginTop: 8, lineHeight: 1.7 }}>
               👤 {o.name} · 📞 {o.phone}<br />
               {o.type === "delivery" ? "🚚 Доставка: " + o.address : "🏪 Самовывоз"} · {o.pay === "kaspi" ? "Kaspi" : "Наличные"}
+              {o.slot && <> · 🕒 {o.slot}</>}{o.zone && <> · {o.zone}</>}
               {o.comment && <><br />💬 {o.comment}</>}
             </div>
             <div style={{ borderTop: "1px dashed #eee", marginTop: 10, paddingTop: 10, fontSize: 14 }}>
@@ -1019,21 +1118,21 @@ export default function SaymanStore() {
     const inp = { width: "100%", padding: "12px 14px", borderRadius: 12, border: "1.5px solid #ddd", fontSize: 15, marginTop: 6, background: "#fff" };
     const saveProfile = () => {
       try { appStorage.set("sayman-customer", JSON.stringify({ name: order.name, phone: order.phone, address: order.address, type: order.type, pay: order.pay })); } catch {}
-      alert("Данные сохранены — при заказе будут подставляться сами");
+      alert(t("saved"));
     };
     return (
       <div style={S.page}>
         <style>{FONTS}</style>
         <div style={{ ...S.wrap, maxWidth: 560, paddingTop: 24, paddingBottom: 60, animation: "fadeUp .3s ease" }}>
-          <button onClick={() => setScreen("shop")} style={{ background: "none", border: "none", fontSize: 15, fontWeight: 700, color: "#666" }}>← В магазин</button>
-          <h1 style={{ fontFamily: "'Unbounded'", fontSize: 24, margin: "16px 0 4px" }}>Мои заказы</h1>
-          <p style={{ color: "#888", fontSize: 13.5, marginBottom: 16 }}>История сохраняется на этом устройстве</p>
+          <button onClick={() => setScreen("shop")} style={{ background: "none", border: "none", fontSize: 15, fontWeight: 700, color: "#666" }}>{t("backShort")}</button>
+          <h1 style={{ fontFamily: "'Unbounded'", fontSize: 24, margin: "16px 0 4px" }}>{t("myOrders")}</h1>
+          <p style={{ color: "#888", fontSize: 13.5, marginBottom: 16 }}>{t("myNote")}</p>
 
-          {myLoading && <div style={{ textAlign: "center", padding: 30, color: "#999" }}>Загружаю…</div>}
+          {myLoading && <div style={{ textAlign: "center", padding: 30, color: "#999" }}>{t("loading")}</div>}
           {!myLoading && myOrders.length === 0 && (
             <div style={{ textAlign: "center", padding: 40, background: "#fff", borderRadius: 16, color: "#888" }}>
               <div style={{ fontSize: 40 }}>🛍️</div>
-              <p style={{ marginTop: 10 }}>Заказов с этого устройства пока не было. Оформите первый — и он появится здесь со статусом.</p>
+              <p style={{ marginTop: 10 }}>{t("noOrders")}</p>
             </div>
           )}
           {myOrders.map((o) => {
@@ -1047,7 +1146,7 @@ export default function SaymanStore() {
                     <span style={{ color: "#999", fontSize: 12.5, marginLeft: 8 }}>{o.date} · {o.time}</span>
                   </div>
                   <span style={{ background: (STATUS[o.status] || STATUS.new).color, color: "#fff", borderRadius: 99, padding: "4px 12px", fontSize: 12, fontWeight: 800 }}>
-                    {(STATUS[o.status] || STATUS.new).label}
+                    {t("st_" + o.status)}
                   </span>
                 </div>
                 {!isCancelled && (
@@ -1064,7 +1163,7 @@ export default function SaymanStore() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
                   <b style={{ fontSize: 16 }}>{fmt(o.total)}</b>
                   <button onClick={() => repeatFromItems(o.items)} style={{ ...S.btn(theme.accentSoft, theme.accentDark), padding: "9px 16px", fontSize: 13.5 }}>
-                    🔄 Повторить
+                    {t("repeat")}
                   </button>
                 </div>
               </div>
@@ -1072,20 +1171,20 @@ export default function SaymanStore() {
           })}
           {myOrders.length > 0 && (
             <button onClick={loadMyOrders} style={{ ...S.btn("#fff", "#666"), width: "100%", padding: 12, fontSize: 14, border: "1.5px solid #e2e0da", marginBottom: 20 }}>
-              ⟳ Обновить статусы
+              {t("refreshSt")}
             </button>
           )}
 
           <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginTop: 8 }}>
-            <div style={{ fontWeight: 800, marginBottom: 4 }}>Мои данные</div>
-            <p style={{ fontSize: 12.5, color: "#999" }}>Подставляются автоматически при оформлении</p>
-            <label style={{ fontWeight: 700, fontSize: 13, display: "block", marginTop: 12 }}>Имя</label>
+            <div style={{ fontWeight: 800, marginBottom: 4 }}>{t("myData")}</div>
+            <p style={{ fontSize: 12.5, color: "#999" }}>{t("myDataNote")}</p>
+            <label style={{ fontWeight: 700, fontSize: 13, display: "block", marginTop: 12 }}>{t("name")}</label>
             <input style={inp} value={order.name} onChange={(e) => setOrder({ ...order, name: e.target.value })} />
-            <label style={{ fontWeight: 700, fontSize: 13, display: "block", marginTop: 12 }}>Телефон</label>
+            <label style={{ fontWeight: 700, fontSize: 13, display: "block", marginTop: 12 }}>{t("phone")}</label>
             <input style={inp} value={order.phone} onChange={(e) => setOrder({ ...order, phone: e.target.value })} />
-            <label style={{ fontWeight: 700, fontSize: 13, display: "block", marginTop: 12 }}>Адрес доставки</label>
+            <label style={{ fontWeight: 700, fontSize: 13, display: "block", marginTop: 12 }}>{t("address")}</label>
             <input style={inp} value={order.address} onChange={(e) => setOrder({ ...order, address: e.target.value })} />
-            <button onClick={saveProfile} style={{ ...S.btn("#1B1B18"), width: "100%", marginTop: 14, padding: 13 }}>Сохранить</button>
+            <button onClick={saveProfile} style={{ ...S.btn("#1B1B18"), width: "100%", marginTop: 14, padding: 13 }}>{t("save")}</button>
           </div>
         </div>
       </div>
@@ -1101,52 +1200,73 @@ export default function SaymanStore() {
       <div style={S.page}>
         <style>{FONTS}</style>
         <div style={{ ...S.wrap, maxWidth: 560, paddingTop: 28, paddingBottom: 60, animation: "fadeUp .3s ease" }}>
-          <button onClick={() => setScreen("shop")} style={{ background: "none", border: "none", fontSize: 15, fontWeight: 700, color: "#666" }}>← Назад в каталог</button>
-          <h1 style={{ fontFamily: "'Unbounded'", fontSize: 24, margin: "18px 0 6px" }}>Оформление заказа</h1>
-          <p style={{ color: "#777", fontSize: 14 }}>{cartCount} товар(ов) на {fmt(cartTotal)}</p>
+          <button onClick={() => setScreen("shop")} style={{ background: "none", border: "none", fontSize: 15, fontWeight: 700, color: "#666" }}>{t("backCatalog")}</button>
+          <h1 style={{ fontFamily: "'Unbounded'", fontSize: 24, margin: "18px 0 6px" }}>{t("coTitle")}</h1>
+          <p style={{ color: "#777", fontSize: 14 }}>{cartCount} · {fmt(cartTotal)}</p>
 
-          <label style={lbl}>Ваше имя</label>
+          <label style={lbl}>{t("name")}</label>
           <input style={inp} value={order.name} onChange={(e) => setOrder({ ...order, name: e.target.value })} placeholder="Например, Асель" />
 
-          <label style={lbl}>Телефон</label>
+          <label style={lbl}>{t("phone")}</label>
           <input style={inp} value={order.phone} onChange={(e) => setOrder({ ...order, phone: e.target.value })} placeholder="+7 (7__) ___-__-__" />
 
-          <label style={lbl}>Способ получения</label>
+          <label style={lbl}>{t("getType")}</label>
           <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
-            <button style={seg(order.type === "delivery")} onClick={() => setOrder({ ...order, type: "delivery" })}>🚚 Доставка</button>
-            <button style={seg(order.type === "pickup")} onClick={() => setOrder({ ...order, type: "pickup" })}>🏪 Самовывоз</button>
+            <button style={seg(order.type === "delivery")} onClick={() => setOrder({ ...order, type: "delivery" })}>🚚 {t("delivery")}</button>
+            <button style={seg(order.type === "pickup")} onClick={() => setOrder({ ...order, type: "pickup" })}>🏪 {t("pickup")}</button>
           </div>
 
           {order.type === "delivery" ? (
             <>
-              <label style={lbl}>Адрес доставки</label>
-              <input style={inp} value={order.address} onChange={(e) => setOrder({ ...order, address: e.target.value })} placeholder="Улица, дом, квартира" />
+              <label style={lbl}>{t("address")}</label>
+              <input style={inp} value={order.address} onChange={(e) => setOrder({ ...order, address: e.target.value })} placeholder={lang === "kk" ? "Көше, үй, пәтер" : "Улица, дом, квартира"} />
+              {zonesArr.length > 0 && (
+                <>
+                  <label style={lbl}>{t("zoneL")}</label>
+                  <select style={{ ...inp, appearance: "auto" }} value={curZone} onChange={(e) => setOrder({ ...order, zone: e.target.value })}>
+                    {zonesArr.map((z) => <option key={z.name} value={z.name}>{z.name} · {fmt(z.fee)}</option>)}
+                  </select>
+                </>
+              )}
+              <label style={lbl}>{t("slotL")}</label>
+              <select style={{ ...inp, appearance: "auto" }} value={order.slot || ""} onChange={(e) => setOrder({ ...order, slot: e.target.value })}>
+                {(() => {
+                  const h = new Date().getHours();
+                  const opts = [["Ближайшее время (60–90 мин)", t("asap")]];
+                  [[12, 14], [14, 16], [16, 18], [18, 20]].forEach(([a, b]) => {
+                    if (h < b - 1) opts.push(["Сегодня " + a + ":00–" + b + ":00", t("today") + " " + a + ":00–" + b + ":00"]);
+                  });
+                  if (opts.length === 1) opts.push(["Завтра 10:00–12:00", t("tomorrow") + " 10:00–12:00"]);
+                  if (!order.slot) setTimeout(() => setOrder((o) => (o.slot ? o : { ...o, slot: opts[0][0] })), 0);
+                  return opts.map(([v, l]) => <option key={v} value={v}>{l}</option>);
+                })()}
+              </select>
               <p style={{ fontSize: 13, color: "#888", marginTop: 8 }}>
-                {cartTotal >= FREE_DELIVERY ? "🎉 Доставка бесплатная (заказ от " + fmt(FREE_DELIVERY) + ")" : "Доставка " + fmt(DELIVERY_FEE) + " · бесплатно от " + fmt(FREE_DELIVERY)}
+                {cartTotal >= FREE_DELIVERY ? "🎉 " + t("free") + " (" + t("freeFrom") + " " + fmt(FREE_DELIVERY) + ")" : t("delivery") + " " + fmt(zoneFee) + " · " + t("freeFrom") + " " + fmt(FREE_DELIVERY)}
               </p>
             </>
           ) : (
-            <p style={{ fontSize: 13, color: "#888", marginTop: 10 }}>📍 Магазин «Сайман», г. Шымкент, ул. Байтерекова, 9а. Заказ будет готов через 30–40 минут.</p>
+            <p style={{ fontSize: 13, color: "#888", marginTop: 10 }}>{t("pickupNote")}</p>
           )}
 
-          <label style={lbl}>Оплата</label>
+          <label style={lbl}>{t("pay")}</label>
           <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
-            <button style={seg(order.pay === "kaspi")} onClick={() => setOrder({ ...order, pay: "kaspi" })}>Kaspi перевод / QR</button>
-            <button style={seg(order.pay === "cash")} onClick={() => setOrder({ ...order, pay: "cash" })}>Наличные</button>
+            <button style={seg(order.pay === "kaspi")} onClick={() => setOrder({ ...order, pay: "kaspi" })}>{t("kaspi")}</button>
+            <button style={seg(order.pay === "cash")} onClick={() => setOrder({ ...order, pay: "cash" })}>{t("cash")}</button>
           </div>
 
-          <label style={lbl}>Комментарий к заказу</label>
-          <textarea style={{ ...inp, minHeight: 70 }} value={order.comment} onChange={(e) => setOrder({ ...order, comment: e.target.value })} placeholder="Например: позвонить за 10 минут" />
+          <label style={lbl}>{t("comment")}</label>
+          <textarea style={{ ...inp, minHeight: 70 }} value={order.comment} onChange={(e) => setOrder({ ...order, comment: e.target.value })} placeholder={t("commentPh")} />
 
           <div style={{ background: "#fff", borderRadius: 14, padding: 18, marginTop: 24, border: "1px solid #eee" }}>
-            <Row label="Товары" val={fmt(cartTotal)} />
-            <Row label="Доставка" val={order.type === "pickup" ? "—" : deliveryFee ? fmt(deliveryFee) : "бесплатно"} />
+            <Row label={t("items")} val={fmt(cartTotal)} />
+            <Row label={t("delivery")} val={order.type === "pickup" ? "—" : deliveryFee ? fmt(deliveryFee) : t("free")} />
             <div style={{ borderTop: "1px dashed #ddd", margin: "10px 0" }} />
-            <Row label="Итого" val={fmt(cartTotal + deliveryFee)} bold />
+            <Row label={t("total")} val={fmt(cartTotal + deliveryFee)} bold />
           </div>
 
           <button style={{ ...S.btn(theme.accent), width: "100%", marginTop: 18, padding: "16px" }} onClick={submitOrder}>
-            Подтвердить заказ · {fmt(cartTotal + deliveryFee)}
+            {t("confirm")} · {fmt(cartTotal + deliveryFee)}
           </button>
         </div>
       </div>
@@ -1169,10 +1289,12 @@ export default function SaymanStore() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <a href="tel:+77755683313" style={{ color: "#fff", textDecoration: "none", fontSize: 14, fontWeight: 700, opacity: 0.9 }}>📞 +7 775 568 33 13</a>
+            <button onClick={switchLang} title="Тіл / Язык"
+              style={{ ...S.btn("rgba(255,255,255,.14)"), padding: "10px 12px", fontSize: 12.5, fontWeight: 800 }}>{lang === "ru" ? "ҚАЗ" : "РУС"}</button>
             <button onClick={() => { setScreen("account"); loadMyOrders(); }} title="Мои заказы"
               style={{ ...S.btn("rgba(255,255,255,.14)"), padding: "10px 13px", fontSize: 17 }}>👤</button>
             <button onClick={() => setCartOpen(true)} style={{ ...S.btn(theme.accent), padding: "10px 16px", position: "relative" }}>
-              🛒 Корзина
+              🛒 {t("cart")}
               {cartCount > 0 && (
                 <span style={{ position: "absolute", top: -8, right: -8, background: "#fff", color: theme.accentDark, borderRadius: 99, fontSize: 12, fontWeight: 800, padding: "2px 7px", border: `2px solid ${theme.accent}` }}>{cartCount}</span>
               )}
@@ -1188,15 +1310,15 @@ export default function SaymanStore() {
             {["food", "build"].map((m) => (
               <button key={m} onClick={() => setMode(m)}
                 style={{ background: mode === m ? "#fff" : "transparent", color: mode === m ? THEMES[m].accentDark : "rgba(255,255,255,.85)", border: "none", borderRadius: 10, padding: "10px 22px", fontWeight: 800, fontSize: 15, transition: "all .2s" }}>
-                {m === "food" ? "🥖 Продукты" : "🧱 Стройматериалы"}
+                {m === "food" ? "🥖 " + t("sec_food") : "🧱 " + t("sec_build")}
               </button>
             ))}
           </div>
-          <h1 style={{ fontFamily: "'Unbounded'", color: "#fff", fontSize: "clamp(22px, 4vw, 34px)", fontWeight: 700, marginTop: 18 }}>{theme.tagline}</h1>
-          <p style={{ color: "rgba(255,255,255,.85)", marginTop: 6, fontSize: 15 }}>Доставка по Шымкенту от 60 минут · бесплатно от {fmt(FREE_DELIVERY)}</p>
+          <h1 style={{ fontFamily: "'Unbounded'", color: "#fff", fontSize: "clamp(22px, 4vw, 34px)", fontWeight: 700, marginTop: 18 }}>{t(mode === "food" ? "tag_food" : "tag_build")}</h1>
+          <p style={{ color: "rgba(255,255,255,.85)", marginTop: 6, fontSize: 15 }}>{t("heroA")}{fmt(FREE_DELIVERY)}{t("heroB")}</p>
           {!settings.shop_open && (
             <div style={{ background: "rgba(0,0,0,.3)", color: "#fff", borderRadius: 12, padding: "10px 14px", marginTop: 12, fontSize: 14, fontWeight: 700 }}>
-              🌙 Магазин сейчас закрыт ({settings.hours}). Заказ можно оформить — соберём в рабочее время.
+              {t("closed1")} ({settings.hours}). {t("closed2")}
             </div>
           )}
         </div>
@@ -1204,19 +1326,19 @@ export default function SaymanStore() {
 
       {/* Поиск + категории */}
       <div style={{ ...S.wrap, paddingTop: 20 }}>
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={"Поиск в разделе «" + theme.label + "»…"}
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("searchIn") + " «" + t(mode === "food" ? "sec_food" : "sec_build") + "»…"}
           style={{ width: "100%", padding: "14px 16px", borderRadius: 14, border: "1.5px solid #e2e0da", fontSize: 15, background: "#fff" }} />
         <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "14px 0 4px" }}>
           {categories.map((c) => (
             <button key={c} onClick={() => setCategory(c)}
               style={{ whiteSpace: "nowrap", padding: "9px 16px", borderRadius: 99, fontWeight: 700, fontSize: 13.5, border: "none", background: category === c ? theme.accent : "#fff", color: category === c ? "#fff" : "#444", boxShadow: category === c ? "none" : "0 1px 3px rgba(0,0,0,.06)" }}>
-              {c}
+              {c === "Все" ? t("all") : c}
             </button>
           ))}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", paddingTop: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 13, color: "#888", fontWeight: 700 }}>Сортировка:</span>
-          {[["default", "По порядку"], ["promo", "🔥 Акции и хиты"], ["cheap", "Дешевле"], ["expensive", "Дороже"]].map(([k, label]) => (
+          <span style={{ fontSize: 13, color: "#888", fontWeight: 700 }}>{t("sort")}</span>
+          {[["default", t("sort_default")], ["promo", t("sort_promo")], ["cheap", t("sort_cheap")], ["expensive", t("sort_exp")]].map(([k, label]) => (
             <button key={k} onClick={() => setSort(k)}
               style={{ padding: "6px 12px", borderRadius: 99, fontWeight: 700, fontSize: 12.5, border: sort === k ? `1.5px solid ${theme.accent}` : "1.5px solid #e2e0da", background: sort === k ? theme.accentSoft : "#fff", color: sort === k ? theme.accentDark : "#666" }}>
               {label}
@@ -1230,12 +1352,12 @@ export default function SaymanStore() {
         {orders.length > 0 && cartCount === 0 && (
           <button onClick={repeatLastOrder}
             style={{ ...S.btn("#fff", theme.accentDark), width: "100%", marginBottom: 14, padding: "14px", border: `1.5px dashed ${theme.accent}`, fontSize: 14.5 }}>
-            🔄 Повторить прошлый заказ ({orders[0].items.length} поз. на {fmt(orders[0].total)})
+            {t("repeatLast")} ({orders[0].items.length} · {fmt(orders[0].total)})
           </button>
         )}
         {sort !== "promo" && category === "Все" && !search && products.some((p) => p.oldPrice && p.available !== false) && (
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 8 }}>🔥 Акции недели</div>
+            <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 8 }}>{t("promoWeek")}</div>
             <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
               {products.filter((p) => p.oldPrice && p.available !== false).map((p) => (
                 <div key={"promo-" + p.id} style={{ minWidth: 200, background: "#fff", borderRadius: 14, padding: 12, display: "flex", alignItems: "center", gap: 10, border: "1.5px solid #f3d9c8" }}>
@@ -1256,7 +1378,7 @@ export default function SaymanStore() {
         {visible.length === 0 && (
           <div style={{ textAlign: "center", padding: 60, color: "#888" }}>
             <div style={{ fontSize: 40 }}>🔍</div>
-            <p style={{ marginTop: 10 }}>Ничего не нашлось. Попробуйте изменить запрос или позвоните нам — подберём вручную.</p>
+            <p style={{ marginTop: 10 }}>{t("notFound")}</p>
           </div>
         )}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(165px, 1fr))", gap: 14 }}>
@@ -1287,7 +1409,7 @@ export default function SaymanStore() {
                   <span style={{ fontSize: 12, color: "#999", fontWeight: 600 }}> / {p.unit}</span>
                 </div>
                 {qty === 0 ? (
-                  <button onClick={() => add(p.id, 1)} style={{ ...S.btn(theme.accentSoft, theme.accentDark), marginTop: 10, padding: "10px", fontSize: 14 }}>В корзину</button>
+                  <button onClick={() => add(p.id, 1)} style={{ ...S.btn(theme.accentSoft, theme.accentDark), marginTop: 10, padding: "10px", fontSize: 14 }}>{t("toCart")}</button>
                 ) : (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10, background: theme.accent, borderRadius: 12 }}>
                     <QtyBtn onClick={() => add(p.id, -1)}>−</QtyBtn>
@@ -1322,7 +1444,7 @@ export default function SaymanStore() {
       {cartCount > 0 && !cartOpen && (
         <button onClick={() => setCartOpen(true)}
           style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", ...S.btn(theme.accentDark), padding: "15px 28px", borderRadius: 99, boxShadow: "0 8px 24px rgba(0,0,0,.25)", zIndex: 25, fontSize: 15 }}>
-          🛒 {cartCount} · {fmt(cartTotal)} — оформить
+          🛒 {cartCount} · {fmt(cartTotal)} — {t("checkout")}
         </button>
       )}
 
@@ -1332,13 +1454,13 @@ export default function SaymanStore() {
           <div onClick={(e) => e.stopPropagation()}
             style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: "min(420px, 100%)", background: "#fff", padding: 22, overflowY: "auto", animation: "slideIn .25s ease", display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h2 style={{ fontFamily: "'Unbounded'", fontSize: 19 }}>Корзина</h2>
+              <h2 style={{ fontFamily: "'Unbounded'", fontSize: 19 }}>{t("cart")}</h2>
               <button onClick={() => setCartOpen(false)} style={{ background: "#f2f1ed", border: "none", borderRadius: 10, width: 36, height: 36, fontSize: 16 }}>✕</button>
             </div>
             {cartItems.length === 0 ? (
               <div style={{ textAlign: "center", marginTop: 80, color: "#888" }}>
                 <div style={{ fontSize: 44 }}>🛒</div>
-                <p style={{ marginTop: 10 }}>Пока пусто. Добавьте товары из каталога.</p>
+                <p style={{ marginTop: 10 }}>{t("cartEmpty")}</p>
               </div>
             ) : (
               <>
@@ -1359,14 +1481,14 @@ export default function SaymanStore() {
                   ))}
                 </div>
                 {cartTotal < FREE_DELIVERY && (
-                  <p style={{ fontSize: 13, color: "#888", marginTop: 12 }}>Ещё {fmt(FREE_DELIVERY - cartTotal)} до бесплатной доставки</p>
+                  <p style={{ fontSize: 13, color: "#888", marginTop: 12 }}>+{fmt(FREE_DELIVERY - cartTotal)} — {t("toFree")}</p>
                 )}
                 <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, fontSize: 18, marginTop: 12 }}>
-                  <span>Итого</span><span>{fmt(cartTotal)}</span>
+                  <span>{t("total")}</span><span>{fmt(cartTotal)}</span>
                 </div>
                 <button style={{ ...S.btn(theme.accent), width: "100%", marginTop: 14, padding: 16 }}
                   onClick={() => { setCartOpen(false); setScreen("checkout"); }}>
-                  Оформить заказ
+                  {t("makeOrder")}
                 </button>
               </>
             )}
@@ -1379,16 +1501,16 @@ export default function SaymanStore() {
         <div style={{ ...S.wrap, display: "flex", flexWrap: "wrap", gap: 20, justifyContent: "space-between" }}>
           <div>
             <div style={{ fontFamily: "'Unbounded'", fontWeight: 900, color: "#fff", fontSize: 18 }}>САЙМАН<span style={{ color: theme.accent }}>.</span></div>
-            <div style={{ marginTop: 6 }}>Продукты и стройматериалы рядом с домом</div>
+            <div style={{ marginTop: 6 }}>{t("footerTag")}</div>
           </div>
           <div>
             📍 г. Шымкент, ул. Байтерекова, 9а<br />
-            🕗 Ежедневно {settings.hours}<br />
+            🕗 {t("daily")} {settings.hours}<br />
             📞 +7 775 568 33 13
           </div>
           <button onClick={() => setPrivacyOpen(true)}
             style={{ background: "none", color: "rgba(255,255,255,.6)", border: "none", padding: "8px 0", fontSize: 13, alignSelf: "center", textDecoration: "underline" }}>
-            Политика конфиденциальности
+            {t("privacy")}
           </button>
           <button onClick={() => setScreen("admin")}
             style={{ background: "rgba(255,255,255,.08)", color: "rgba(255,255,255,.6)", border: "1px solid rgba(255,255,255,.15)", borderRadius: 10, padding: "8px 14px", fontSize: 13, alignSelf: "center" }}>
