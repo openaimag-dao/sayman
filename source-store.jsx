@@ -145,6 +145,10 @@ const I18N = {
     privacy: "Политика конфиденциальности", loading: "Загружаю…",
     st_new: "Новый", st_accepted: "Принят", st_picking: "Сборка", st_picked: "Собран",
     st_delivering: "В пути", st_done: "Доставлен", st_cancelled: "Отменён",
+    linkTitle: "Мой аккаунт на другом устройстве", linkNote: "Чтобы видеть свои заказы на новом телефоне или компьютере",
+    getCode: "Получить код переноса", codeShown: "Введите этот код на другом устройстве в течение 15 минут:",
+    haveCode: "Есть код с другого устройства?", codePh: "6 цифр", applyCode: "Перенести сюда",
+    codeOk: "Готово! Ваши заказы и данные перенесены на это устройство.", codeBad: "Код не найден или истёк — получите новый",
   },
   kk: {
     sec_food: "Азық-түлік", sec_build: "Құрылыс материалдары",
@@ -180,6 +184,10 @@ const I18N = {
     privacy: "Құпиялылық саясаты", loading: "Жүктелуде…",
     st_new: "Жаңа", st_accepted: "Қабылданды", st_picking: "Жиналуда", st_picked: "Жиналды",
     st_delivering: "Жолда", st_done: "Жеткізілді", st_cancelled: "Бас тартылды",
+    linkTitle: "Аккаунтым басқа құрылғыда", linkNote: "Тапсырыстарыңызды жаңа телефонда немесе компьютерде көру үшін",
+    getCode: "Көшіру кодын алу", codeShown: "Осы кодты 15 минут ішінде басқа құрылғыда енгізіңіз:",
+    haveCode: "Басқа құрылғыдан код бар ма?", codePh: "6 сан", applyCode: "Осында көшіру",
+    codeOk: "Дайын! Тапсырыстарыңыз бен деректеріңіз осы құрылғыға көшірілді.", codeBad: "Код табылмады немесе мерзімі өтті — жаңасын алыңыз",
   },
 };
 
@@ -272,6 +280,8 @@ export default function SaymanStore() {
   const [pickState, setPickState] = useState({});
   const [myOrders, setMyOrders] = useState([]);
   const [myLoading, setMyLoading] = useState(false);
+  const [linkCode, setLinkCode] = useState("");
+  const [claimInput, setClaimInput] = useState("");
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [orderFilter, setOrderFilter] = useState("all");
   const [orderSearch, setOrderSearch] = useState("");
@@ -1185,6 +1195,40 @@ export default function SaymanStore() {
             <label style={{ fontWeight: 700, fontSize: 13, display: "block", marginTop: 12 }}>{t("address")}</label>
             <input style={inp} value={order.address} onChange={(e) => setOrder({ ...order, address: e.target.value })} />
             <button onClick={saveProfile} style={{ ...S.btn("#1B1B18"), width: "100%", marginTop: 14, padding: 13 }}>{t("save")}</button>
+          </div>
+
+          <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginTop: 16 }}>
+            <div style={{ fontWeight: 800, marginBottom: 4 }}>📲 {t("linkTitle")}</div>
+            <p style={{ fontSize: 12.5, color: "#999" }}>{t("linkNote")}</p>
+            {linkCode ? (
+              <div style={{ textAlign: "center", marginTop: 12 }}>
+                <p style={{ fontSize: 13, color: "#555" }}>{t("codeShown")}</p>
+                <div style={{ fontFamily: "'Unbounded'", fontSize: 34, fontWeight: 900, letterSpacing: 8, color: theme.accent, margin: "10px 0" }}>{linkCode}</div>
+              </div>
+            ) : (
+              <button style={{ ...S.btn(theme.accentSoft, theme.accentDark), width: "100%", marginTop: 12, padding: 13 }}
+                onClick={async () => {
+                  try { const c = await rpc("client_make_code", { _cid: getClientId() }); setLinkCode(c); }
+                  catch { alert("Нет связи с базой — попробуйте позже"); }
+                }}>{t("getCode")}</button>
+            )}
+            <div style={{ borderTop: "1px dashed #eee", margin: "16px 0 12px" }} />
+            <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t("haveCode")}</div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <input style={{ ...inp, marginTop: 0, textAlign: "center", letterSpacing: 4, fontWeight: 800 }} inputMode="numeric" maxLength={6}
+                placeholder={t("codePh")} value={claimInput} onChange={(e) => setClaimInput(e.target.value.replace(/\D/g, ""))} />
+              <button style={{ ...S.btn("#1B1B18"), padding: "12px 16px", fontSize: 13.5, whiteSpace: "nowrap" }}
+                onClick={async () => {
+                  if (claimInput.length !== 6) return;
+                  try {
+                    const cid = await rpc("client_claim_code", { _code: claimInput });
+                    try { localStorage.setItem("sayman-cid", cid); } catch {}
+                    setClaimInput(""); setLinkCode("");
+                    await loadMyOrders();
+                    alert(t("codeOk"));
+                  } catch { alert(t("codeBad")); }
+                }}>{t("applyCode")}</button>
+            </div>
           </div>
         </div>
       </div>
