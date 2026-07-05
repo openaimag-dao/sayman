@@ -299,6 +299,7 @@ export default function SaymanStore() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [orderFilter, setOrderFilter] = useState("all");
   const [orderSearch, setOrderSearch] = useState("");
+  const [orderDays, setOrderDays] = useState("all");
   const [prodSearch, setProdSearch] = useState("");
   const [pinsDraft, setPinsDraft] = useState({ a: "", p: "", c: "" });
   const prevNewCount = useRef(0);
@@ -392,6 +393,23 @@ export default function SaymanStore() {
     try { await loadAdminOrders(pin); setStaffPin(pin); setStaffAuth(true); setPinInput(""); }
     catch { setPinInput(""); alert("Неверный PIN-код (или нет связи с базой)"); }
   };
+  const notifyClient = (o) => {
+    const phone = String(o.phone || "").replace(/\D/g, "");
+    if (phone.length < 10) return alert("У заказа нет корректного номера клиента");
+    const texts = {
+      new: "Здравствуйте! Ваш заказ " + o.num + " в магазине «Сайман» принят. Сумма: " + fmt(o.total) + ". Скоро начнём сборку!",
+      accepted: "Здравствуйте! Ваш заказ " + o.num + " принят в работу. Сумма: " + fmt(o.total) + (o.slot ? ". Доставка: " + o.slot : "") + ".",
+      picking: "Ваш заказ " + o.num + " сейчас собирается. Если какой-то позиции не окажется — мы позвоним и предложим замену.",
+      picked: o.type === "pickup"
+        ? "Ваш заказ " + o.num + " собран и ждёт вас в магазине «Сайман» (Байтерекова, 9а). Сумма: " + fmt(o.total) + "."
+        : "Ваш заказ " + o.num + " собран и передаётся курьеру. Сумма: " + fmt(o.total) + ".",
+      delivering: "Курьер выехал с вашим заказом " + o.num + "! Сумма к оплате: " + fmt(o.total) + " (" + (o.pay === "kaspi" ? "Kaspi" : "наличные") + ").",
+      done: "Заказ " + o.num + " доставлен. Спасибо, что выбрали «Сайман»! Будем рады новому заказу 🙌",
+      cancelled: "К сожалению, заказ " + o.num + " отменён. Свяжитесь с нами, если это ошибка: +7 775 568 33 13.",
+    };
+    window.open("https://wa.me/" + (phone.length === 10 ? "7" + phone : phone) + "?text=" + encodeURIComponent(texts[o.status] || texts.accepted), "_blank");
+  };
+
   const printOrder = (o) => {
     const rows = (o.items || []).map((i) =>
       "<tr><td style='border-bottom:1px solid #ccc;padding:6px 4px;font-size:20px'>☐</td>" +
@@ -1093,6 +1111,35 @@ export default function SaymanStore() {
               ))}
             </div>
             <div style={card}>
+              <div style={{ fontWeight: 800, marginBottom: 4 }}>Работа команды (для сдельной оплаты)</div>
+              <p style={{ fontSize: 12.5, color: "#999", marginBottom: 10 }}>Сколько заказов закрыл каждый сотрудник. Умножьте на ставку — получите сумму к выплате.</p>
+              {(() => {
+                const pick = {}; const cour = {};
+                adminOrders.forEach((o) => {
+                  if (o.status === "cancelled") return;
+                  if (o.picker && ["picked", "delivering", "done"].includes(o.status)) {
+                    pick[o.picker] = pick[o.picker] || { n: 0, sum: 0 };
+                    pick[o.picker].n++; pick[o.picker].sum += o.total;
+                  }
+                  if (o.courier && o.status === "done") {
+                    cour[o.courier] = cour[o.courier] || { n: 0, sum: 0 };
+                    cour[o.courier].n++; cour[o.courier].sum += o.total;
+                  }
+                });
+                const rows = [
+                  ...Object.entries(pick).map(([n, d]) => ["🧺 " + n, d, "собрано"]),
+                  ...Object.entries(cour).map(([n, d]) => ["🛵 " + n, d, "доставлено"]),
+                ];
+                if (!rows.length) return <div style={{ color: "#999", fontSize: 14 }}>Появится, когда команда начнёт закрывать заказы</div>;
+                return rows.map(([name, d, verb]) => (
+                  <div key={name + verb} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid #f4f3ef", fontSize: 14 }}>
+                    <span><b>{name}</b> · {verb}: {d.n}</span>
+                    <span style={{ color: "#888" }}>оборот {fmt(d.sum)}</span>
+                  </div>
+                ));
+              })()}
+            </div>
+            <div style={card}>
               <div style={{ fontWeight: 800, marginBottom: 12 }}>Заказы по районам (доставка)</div>
               {(() => {
                 const zi = {};
@@ -1283,8 +1330,12 @@ export default function SaymanStore() {
       <div style={{ ...S.wrap, maxWidth: 720, paddingTop: 24, paddingBottom: 60 }}>
         {(() => {
           const today = new Date().toLocaleDateString("ru-RU");
-          const todayOrders = adminOrders.filter((o) => o.date === today);
+          const yd = new Date(); yd.setDate(yd.getDate() - 1);
+          const yesterday = yd.toLocaleDateString("ru-RU");
+          const todayOrders = adminOrders.filter((o) => o.date === today && o.status !== "cancelled");
           const todayRevenue = todayOrders.reduce((s, o) => s + o.total, 0);
+          const ydRevenue = adminOrders.filter((o) => o.date === yesterday && o.status !== "cancelled").reduce((s, o) => s + o.total, 0);
+          const stuck = adminOrders.filter((o) => ["new", "accepted"].includes(o.status) && (Date.now() - new Date(o.created_at)) > 15 * 60000).length;
           return (
             <div style={{ background: "#1B1B18", color: "#fff", borderRadius: 16, padding: "16px 20px", marginBottom: 16, display: "flex", gap: 28, flexWrap: "wrap" }}>
               <div>
@@ -1294,7 +1345,14 @@ export default function SaymanStore() {
               <div>
                 <div style={{ fontSize: 12, opacity: 0.6, fontWeight: 700 }}>СУММА ЗА ДЕНЬ</div>
                 <div style={{ fontFamily: "'Unbounded'", fontSize: 24, fontWeight: 700 }}>{fmt(todayRevenue)}</div>
+                <div style={{ fontSize: 11.5, opacity: 0.55 }}>вчера: {fmt(ydRevenue)}</div>
               </div>
+              {stuck > 0 && (
+                <div>
+                  <div style={{ fontSize: 12, color: "#FF8A70", fontWeight: 800 }}>⚠ ЖДУТ &gt;15 МИН</div>
+                  <div style={{ fontFamily: "'Unbounded'", fontSize: 24, fontWeight: 700, color: "#FF8A70" }}>{stuck}</div>
+                </div>
+              )}
               <div>
                 <div style={{ fontSize: 12, opacity: 0.6, fontWeight: 700 }}>ВСЕГО ЗАКАЗОВ</div>
                 <div style={{ fontFamily: "'Unbounded'", fontSize: 24, fontWeight: 700 }}>{adminOrders.length}</div>
@@ -1305,6 +1363,14 @@ export default function SaymanStore() {
         })()}
         <input value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} placeholder="Поиск: номер заказа, телефон или имя…"
           style={{ width: "100%", padding: "13px 15px", borderRadius: 12, border: "1.5px solid #e2e0da", fontSize: 14.5, background: "#fff", marginBottom: 12 }} />
+        <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+          {[["all", "За всё время"], ["today", "Сегодня"], ["7", "7 дней"]].map(([k, label]) => (
+            <button key={k} onClick={() => setOrderDays(k)}
+              style={{ background: orderDays === k ? "#1B1B18" : "#fff", color: orderDays === k ? "#fff" : "#666", border: "none", borderRadius: 12, padding: "8px 13px", fontSize: 12.5, fontWeight: 700 }}>
+              {label}
+            </button>
+          ))}
+        </div>
         <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
           <button onClick={() => setOrderFilter("all")}
             style={{ background: orderFilter === "all" ? "#1B1B18" : "#fff", color: orderFilter === "all" ? "#fff" : "#444", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, fontWeight: 700 }}>
@@ -1327,6 +1393,8 @@ export default function SaymanStore() {
             <p style={{ marginTop: 10 }}>Заказов пока нет. Как только клиент оформит заказ на сайте — он появится здесь.</p>
           </div>
         ) : adminOrders.filter((o) =>
+          (orderDays === "all" || (orderDays === "today" && o.date === new Date().toLocaleDateString("ru-RU")) ||
+            (orderDays === "7" && (Date.now() - new Date(o.created_at)) < 7 * 86400000)) &&
           (orderFilter === "all" || o.status === orderFilter) &&
           ((o.num || "") + " " + (o.phone || "") + " " + (o.name || "")).toLowerCase().includes(orderSearch.toLowerCase().trim())
         ).map((o) => (
@@ -1341,6 +1409,8 @@ export default function SaymanStore() {
                   style={{ background: STATUS[o.status].color, color: "#fff", border: "none", borderRadius: 99, padding: "7px 16px", fontWeight: 700, fontSize: 13 }}>
                   {STATUS[o.status].label}{NEXT_STATUS[o.status] ? " → " + STATUS[NEXT_STATUS[o.status]].label : ""}
                 </button>
+                <button onClick={() => notifyClient(o)} title="Написать клиенту в WhatsApp (готовый текст по статусу)"
+                  style={{ background: "#25D366", color: "#fff", border: "none", borderRadius: 99, padding: "7px 12px", fontWeight: 800, fontSize: 13 }}>💬</button>
                 <button onClick={() => printOrder(o)} title="Печать листа сборки"
                   style={{ background: "#f2f1ed", color: "#444", border: "none", borderRadius: 99, padding: "7px 12px", fontWeight: 800, fontSize: 13 }}>🖨</button>
                 {!["done", "cancelled"].includes(o.status) && (
