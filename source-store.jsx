@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 // ─────────────────────────────────────────────
 //  САЙМАН — интернет-магазин (прототип)
@@ -228,6 +229,7 @@ const getClientId = () => {
 };
 const ORDER_FLOW = ["new", "accepted", "picking", "picked", "delivering", "done"];
 
+const supaRT = createClient(SUPA_URL, SUPA_KEY);
 const mapOrderRow = (r) => ({ ...r, time: new Date(r.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }), date: new Date(r.created_at).toLocaleDateString("ru-RU") });
 
 const fmt = (n) => n.toLocaleString("ru-RU") + " ₸";
@@ -338,7 +340,14 @@ export default function SaymanStore() {
   useEffect(() => {
     if (!staffAuth || screen !== "admin") return;
     const t = setInterval(() => { loadAdminOrders(staffPin).catch(() => {}); }, 30000);
-    return () => clearInterval(t);
+    const ch = supaRT
+      .channel("orders-live")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" }, () => {
+        beep();
+        loadAdminOrders(staffPin).catch(() => {});
+      })
+      .subscribe();
+    return () => { clearInterval(t); supaRT.removeChannel(ch); };
   }, [staffAuth, screen, staffPin]);
   useEffect(() => {
     if (staffAuth && staffRole === "admin" && adminTab === "settings") {
@@ -378,6 +387,29 @@ export default function SaymanStore() {
     try { await loadAdminOrders(pin); setStaffPin(pin); setStaffAuth(true); setPinInput(""); }
     catch { setPinInput(""); alert("Неверный PIN-код (или нет связи с базой)"); }
   };
+  const printOrder = (o) => {
+    const rows = (o.items || []).map((i) =>
+      "<tr><td style='border-bottom:1px solid #ccc;padding:6px 4px;font-size:20px'>☐</td>" +
+      "<td style='border-bottom:1px solid #ccc;padding:6px 4px'>" + i.name + (i.missing ? " (НЕТ)" : "") + "</td>" +
+      "<td style='border-bottom:1px solid #ccc;padding:6px 4px;text-align:center'><b>× " + i.qty + "</b></td>" +
+      "<td style='border-bottom:1px solid #ccc;padding:6px 4px;text-align:right'>" + (i.qty * i.price).toLocaleString("ru-RU") + " ₸</td></tr>"
+    ).join("");
+    const html = "<html><head><meta charset='utf-8'><title>" + o.num + "</title></head>" +
+      "<body style='font-family:Arial;max-width:420px;margin:0 auto;padding:10px'>" +
+      "<h2 style='margin:4px 0'>САЙМАН · " + o.num + "</h2>" +
+      "<div style='font-size:14px;color:#333'>" + (o.date || "") + " " + (o.time || "") + "<br>" +
+      "👤 " + (o.name || "") + " · " + (o.phone || "") + "<br>" +
+      (o.type === "delivery" ? "🚚 " + (o.address || "") + (o.zone ? " (" + o.zone + ")" : "") : "🏪 Самовывоз") +
+      (o.slot ? "<br>🕒 " + o.slot : "") +
+      (o.comment ? "<br>💬 " + o.comment : "") + "</div>" +
+      "<table style='width:100%;border-collapse:collapse;margin-top:10px;font-size:14px'>" + rows + "</table>" +
+      "<h3 style='text-align:right;margin-top:10px'>ИТОГО: " + (o.total || 0).toLocaleString("ru-RU") + " ₸ · " +
+      (o.pay === "kaspi" ? "Kaspi" : "Наличные") + "</h3>" +
+      "<script>window.print()</" + "script></body></html>";
+    const w = window.open("", "_blank", "width=460,height=640");
+    if (w) { w.document.write(html); w.document.close(); }
+  };
+
   const exportCSV = () => {
     const esc = (v) => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
     const rows = [["Номер", "Дата", "Время", "Имя", "Телефон", "Получение", "Адрес", "Оплата", "Статус", "Сумма", "Состав"].join(";")];
@@ -976,6 +1008,30 @@ export default function SaymanStore() {
                 </div>
               ))}
             </div>
+            <div style={card}>
+              <div style={{ fontWeight: 800, marginBottom: 12 }}>Заказы по районам (доставка)</div>
+              {(() => {
+                const zi = {};
+                adminOrders.forEach((o) => {
+                  if (o.type !== "delivery" || o.status === "cancelled") return;
+                  const k = o.zone || "Без района";
+                  zi[k] = zi[k] || { n: 0, sum: 0 };
+                  zi[k].n++; zi[k].sum += o.total;
+                });
+                const zlist = Object.entries(zi).sort((a, b) => b[1].sum - a[1].sum);
+                if (!zlist.length) return <div style={{ color: "#999", fontSize: 14 }}>Появится после первых доставок — покажет, из каких районов идёт спрос</div>;
+                const zmax = Math.max(...zlist.map(([, d]) => d.sum), 1);
+                return zlist.map(([z, d]) => (
+                  <div key={z} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, width: 130, flexShrink: 0 }}>{z}</span>
+                    <div style={{ flex: 1, background: "#f2f1ed", borderRadius: 6, height: 18, overflow: "hidden" }}>
+                      <div style={{ width: (d.sum / zmax * 100) + "%", background: "#C77B12", height: "100%", borderRadius: 6 }} />
+                    </div>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, width: 110, textAlign: "right", flexShrink: 0 }}>{d.n} · {fmt(d.sum)}</span>
+                  </div>
+                ));
+              })()}
+            </div>
             <button onClick={exportCSV} style={{ ...S.btn("#1B1B18"), width: "100%", padding: 15 }}>
               ⬇️ Выгрузить все заказы в Excel (CSV)
             </button>
@@ -1123,6 +1179,8 @@ export default function SaymanStore() {
                     <button onClick={() => updateProduct(adminSection, p.id, { img: undefined })} title="Убрать фото"
                       style={{ background: "#f2f1ed", border: "none", borderRadius: 8, padding: "8px 9px", fontSize: 13 }}>🖼️✕</button>
                   )}
+                  <button onClick={() => addProduct(adminSection, { cat: p.cat, name: p.name + " (копия)", unit: p.unit, price: p.price, emoji: p.emoji, img: p.img })} title="Дублировать товар"
+                    style={{ background: "#f2f1ed", border: "none", borderRadius: 8, padding: "8px 10px", fontSize: 13 }}>📋</button>
                   <button onClick={() => deleteProduct(adminSection, p.id)} title="Удалить товар"
                     style={{ background: "#FBE9E4", border: "none", borderRadius: 8, padding: "8px 10px", fontSize: 14 }}>🗑️</button>
                 </div>
@@ -1199,6 +1257,8 @@ export default function SaymanStore() {
                   style={{ background: STATUS[o.status].color, color: "#fff", border: "none", borderRadius: 99, padding: "7px 16px", fontWeight: 700, fontSize: 13 }}>
                   {STATUS[o.status].label}{NEXT_STATUS[o.status] ? " → " + STATUS[NEXT_STATUS[o.status]].label : ""}
                 </button>
+                <button onClick={() => printOrder(o)} title="Печать листа сборки"
+                  style={{ background: "#f2f1ed", color: "#444", border: "none", borderRadius: 99, padding: "7px 12px", fontWeight: 800, fontSize: 13 }}>🖨</button>
                 {!["done", "cancelled"].includes(o.status) && (
                   <button onClick={() => cancelOrder(o.id)} title="Отменить заказ"
                     style={{ background: "#FBE9E4", color: "#C7411A", border: "none", borderRadius: 99, padding: "7px 12px", fontWeight: 800, fontSize: 13 }}>✕</button>
