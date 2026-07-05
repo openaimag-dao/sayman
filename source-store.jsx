@@ -149,6 +149,8 @@ const I18N = {
     getCode: "Получить код переноса", codeShown: "Введите этот код на другом устройстве в течение 15 минут:",
     haveCode: "Есть код с другого устройства?", codePh: "6 цифр", applyCode: "Перенести сюда",
     codeOk: "Готово! Ваши заказы и данные перенесены на это устройство.", codeBad: "Код не найден или истёк — получите новый",
+    promoL: "Промокод", promoPh: "Есть промокод?", applyP: "Применить", discountL: "Скидка",
+    leftN: "Осталось", promoApplied: "Промокод применён!",
   },
   kk: {
     sec_food: "Азық-түлік", sec_build: "Құрылыс материалдары",
@@ -188,6 +190,8 @@ const I18N = {
     getCode: "Көшіру кодын алу", codeShown: "Осы кодты 15 минут ішінде басқа құрылғыда енгізіңіз:",
     haveCode: "Басқа құрылғыдан код бар ма?", codePh: "6 сан", applyCode: "Осында көшіру",
     codeOk: "Дайын! Тапсырыстарыңыз бен деректеріңіз осы құрылғыға көшірілді.", codeBad: "Код табылмады немесе мерзімі өтті — жаңасын алыңыз",
+    promoL: "Промокод", promoPh: "Промокод бар ма?", applyP: "Қолдану", discountL: "Жеңілдік",
+    leftN: "Қалды", promoApplied: "Промокод қолданылды!",
   },
 };
 
@@ -210,8 +214,8 @@ const sHeaders = { apikey: SUPA_KEY, Authorization: "Bearer " + SUPA_KEY, "Conte
 const sGet = (path) => fetch(SUPA_URL + "/rest/v1/" + path, { headers: sHeaders }).then((r) => { if (!r.ok) throw new Error("db"); return r.json(); });
 const sPost = (path, body, extra) => fetch(SUPA_URL + "/rest/v1/" + path, { method: "POST", headers: { ...sHeaders, ...(extra || {}) }, body: JSON.stringify(body) }).then((r) => { if (!r.ok) return r.text().then((t) => { throw new Error(t); }); return r.text().then((t) => (t ? JSON.parse(t) : null)); });
 const rpc = (fn, args) => sPost("rpc/" + fn, args);
-const rowToProduct = (r) => ({ id: r.id, cat: r.cat, name: r.name, unit: r.unit, price: r.price, oldPrice: r.old_price || undefined, hit: r.hit || undefined, img: r.img || undefined, emoji: r.emoji || "🛒", available: r.available !== false });
-const productToRow = (sec, p) => ({ id: p.id, section: sec, cat: p.cat, name: p.name, unit: p.unit, price: p.price, old_price: p.oldPrice ?? null, hit: !!p.hit, img: p.img ?? null, emoji: p.emoji || "🛒", available: p.available !== false });
+const rowToProduct = (r) => ({ id: r.id, cat: r.cat, name: r.name, unit: r.unit, price: r.price, oldPrice: r.old_price || undefined, hit: r.hit || undefined, img: r.img || undefined, emoji: r.emoji || "🛒", available: r.available !== false, stock: r.stock ?? null });
+const productToRow = (sec, p) => ({ id: p.id, section: sec, cat: p.cat, name: p.name, unit: p.unit, price: p.price, old_price: p.oldPrice ?? null, hit: !!p.hit, img: p.img ?? null, emoji: p.emoji || "🛒", available: p.available !== false, stock: p.stock ?? null });
 const getClientId = () => {
   try {
     let v = localStorage.getItem("sayman-cid");
@@ -235,6 +239,7 @@ const buildWaMsg = (o) => encodeURIComponent(
   (o.type === "delivery" ? "🚚 Доставка: " + o.address : "🏪 Самовывоз") + "\n" +
   (o.slot ? "🕒 " + o.slot + "\n" : "") +
   (o.zone ? "📍 Район: " + o.zone + "\n" : "") +
+  (o.discount ? "🎟 Промокод " + o.promo + ": −" + o.discount.toLocaleString("ru-RU") + " ₸\n" : "") +
   "Оплата: " + (o.pay === "kaspi" ? "Kaspi" : "Наличные") + "\n" +
   (o.comment ? "Комментарий: " + o.comment + "\n" : "") +
   "───────────\n" +
@@ -282,6 +287,10 @@ export default function SaymanStore() {
   const [myLoading, setMyLoading] = useState(false);
   const [linkCode, setLinkCode] = useState("");
   const [claimInput, setClaimInput] = useState("");
+  const [promoInput, setPromoInput] = useState("");
+  const [promoApplied, setPromoApplied] = useState(null);
+  const [promos, setPromos] = useState([]);
+  const [promoDraft, setPromoDraft] = useState({ code: "", kind: "percent", value: "", min_total: "" });
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [orderFilter, setOrderFilter] = useState("all");
   const [orderSearch, setOrderSearch] = useState("");
@@ -331,6 +340,11 @@ export default function SaymanStore() {
     const t = setInterval(() => { loadAdminOrders(staffPin).catch(() => {}); }, 30000);
     return () => clearInterval(t);
   }, [staffAuth, screen, staffPin]);
+  useEffect(() => {
+    if (staffAuth && staffRole === "admin" && adminTab === "settings") {
+      rpc("admin_get_promos", { _pin: staffPin }).then(setPromos).catch(() => {});
+    }
+  }, [staffAuth, staffRole, adminTab, staffPin]);
   useEffect(() => {
     const n = adminOrders.filter((o) => o.status === "new").length;
     if (staffAuth && n > prevNewCount.current) beep();
@@ -442,9 +456,9 @@ export default function SaymanStore() {
       list = [
         ...productsData.food.map((p) => ({ ...p, _sec: "food" })),
         ...productsData.build.map((p) => ({ ...p, _sec: "build" })),
-      ].filter((p) => p.available !== false && p.name.toLowerCase().includes(q));
+      ].filter((p) => p.available !== false && (p.stock == null || p.stock > 0) && p.name.toLowerCase().includes(q));
     } else {
-      list = products.filter((p) => p.available !== false && (category === "Все" || p.cat === category));
+      list = products.filter((p) => p.available !== false && (p.stock == null || p.stock > 0) && (category === "Все" || p.cat === category));
     }
     if (sort === "cheap") list = [...list].sort((a, b) => a.price - b.price);
     if (sort === "expensive") list = [...list].sort((a, b) => b.price - a.price);
@@ -461,8 +475,17 @@ export default function SaymanStore() {
   const curZone = order.zone || (zonesArr[0] && zonesArr[0].name) || "";
   const zoneFee = (zonesArr.find((z) => z.name === curZone) || {}).fee ?? DELIVERY_FEE;
   const deliveryFee = order.type === "delivery" && cartTotal < FREE_DELIVERY ? zoneFee : 0;
+  const discount = promoApplied ? Math.min(promoApplied.discount, cartTotal) : 0;
+  const grandTotal = Math.max(0, cartTotal + deliveryFee - discount);
 
-  const add = (id, d) => setCart((c) => ({ ...c, [id]: Math.max(0, (c[id] || 0) + d) }));
+  const add = (id, d) => setCart((c) => {
+    const q = Math.max(0, (c[id] || 0) + d);
+    if (d > 0) {
+      const p = allProducts.find((x) => x.id === id);
+      if (p && p.stock != null && q > p.stock) { alert((lang === "kk" ? "Қоймада қалғаны: " : "На складе осталось: ") + p.stock); return c; }
+    }
+    return { ...c, [id]: q };
+  });
 
   const submitOrder = () => {
     if (settings.min_order > 0 && cartTotal < settings.min_order) return alert("Минимальная сумма заказа — " + fmt(settings.min_order));
@@ -470,7 +493,8 @@ export default function SaymanStore() {
     if (order.type === "delivery" && !order.address.trim()) return alert("Укажите адрес доставки");
     const num = "SM-" + Math.floor(1000 + Math.random() * 9000);
     const newOrder = {
-      num, ...order, items: cartItems.map(({ img, ...rest }) => rest), total: cartTotal + deliveryFee,
+      num, ...order, items: cartItems.map(({ img, ...rest }) => rest), total: grandTotal,
+      promo: promoApplied ? promoApplied.code : null, discount,
       time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
       date: new Date().toLocaleDateString("ru-RU"), status: "new",
     };
@@ -484,6 +508,7 @@ export default function SaymanStore() {
       address: order.address, pay: order.pay, comment: order.comment,
       slot: order.type === "delivery" ? (order.slot || "") : null,
       zone: order.type === "delivery" ? curZone : null,
+      promo: newOrder.promo, discount: newOrder.discount,
       items: newOrder.items, total: newOrder.total, client_id: getClientId(),
     }, { Prefer: "return=minimal" }).catch(() => {});
     try { appStorage.set("sayman-customer", JSON.stringify({ name: order.name, phone: order.phone, address: order.address, type: order.type, pay: order.pay })); } catch {}
@@ -491,6 +516,8 @@ export default function SaymanStore() {
     setOrderNum(num);
     setScreen("done");
     setCart({});
+    setPromoApplied(null);
+    setPromoInput("");
   };
 
   const cycleStatus = (num) => setOrders((prev) => {
@@ -842,6 +869,54 @@ export default function SaymanStore() {
               <input style={inp} value={pinsDraft.c} onChange={(e) => setPinsDraft({ ...pinsDraft, c: e.target.value.trim() })} placeholder="например 4248" />
               <button onClick={savePins} style={{ ...S.btn("#1B1B18"), width: "100%", marginTop: 16, padding: 14 }}>Сменить PIN-коды</button>
             </div>
+
+            <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginTop: 16 }}>
+              <div style={{ fontWeight: 800, fontSize: 16 }}>🎟 Промокоды</div>
+              <p style={{ fontSize: 12.5, color: "#999", marginTop: 4 }}>Клиент вводит код при оформлении. Примеры: САЙМАН10 (скидка 10%), ПЕРВЫЙ500 (−500 ₸ на первый заказ, лимит использований).</p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                <input style={{ ...inp, marginTop: 0, flex: "1 1 110px", textTransform: "uppercase" }} placeholder="КОД" value={promoDraft.code}
+                  onChange={(e) => setPromoDraft({ ...promoDraft, code: e.target.value })} />
+                <select style={{ ...inp, marginTop: 0, width: 92 }} value={promoDraft.kind} onChange={(e) => setPromoDraft({ ...promoDraft, kind: e.target.value })}>
+                  <option value="percent">%</option>
+                  <option value="fixed">₸</option>
+                </select>
+                <input style={{ ...inp, marginTop: 0, width: 92 }} type="number" placeholder={promoDraft.kind === "percent" ? "10" : "500"} value={promoDraft.value}
+                  onChange={(e) => setPromoDraft({ ...promoDraft, value: e.target.value })} />
+                <input style={{ ...inp, marginTop: 0, width: 120 }} type="number" placeholder="Мин. сумма" value={promoDraft.min_total}
+                  onChange={(e) => setPromoDraft({ ...promoDraft, min_total: e.target.value })} />
+                <button style={{ ...S.btn("#1E7A46"), padding: "11px 16px", fontSize: 14 }}
+                  onClick={() => {
+                    if (!promoDraft.code.trim() || !Number(promoDraft.value)) return alert("Укажите код и размер скидки");
+                    const p = { code: promoDraft.code, kind: promoDraft.kind, value: Number(promoDraft.value), min_total: Number(promoDraft.min_total) || 0, active: true };
+                    rpc("admin_upsert_promo", { _pin: staffPin, _p: p })
+                      .then(() => rpc("admin_get_promos", { _pin: staffPin }).then(setPromos))
+                      .then(() => setPromoDraft({ code: "", kind: "percent", value: "", min_total: "" }))
+                      .catch(dbFail);
+                  }}>Создать</button>
+              </div>
+              {promos.map((p) => (
+                <div key={p.code} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid #f4f3ef", flexWrap: "wrap" }}>
+                  <b style={{ fontSize: 15 }}>{p.code}</b>
+                  <span style={{ fontSize: 13, color: "#777" }}>
+                    −{p.kind === "percent" ? p.value + "%" : fmt(p.value)}{p.min_total > 0 ? " от " + fmt(p.min_total) : ""} · использован: {p.uses}
+                  </span>
+                  <label style={{ marginLeft: "auto", fontSize: 12.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                    <input type="checkbox" checked={p.active}
+                      onChange={(e) => {
+                        rpc("admin_upsert_promo", { _pin: staffPin, _p: { ...p, active: e.target.checked } })
+                          .then(() => setPromos(promos.map((x) => x.code === p.code ? { ...x, active: e.target.checked } : x)))
+                          .catch(dbFail);
+                      }} style={{ width: 17, height: 17, accentColor: "#1E7A46" }} />
+                    активен
+                  </label>
+                  <button onClick={() => {
+                    if (!window.confirm("Удалить промокод " + p.code + "?")) return;
+                    rpc("admin_delete_promo", { _pin: staffPin, _code: p.code })
+                      .then(() => setPromos(promos.filter((x) => x.code !== p.code))).catch(dbFail);
+                  }} style={{ background: "#FBE9E4", border: "none", borderRadius: 8, padding: "7px 10px", fontSize: 13 }}>🗑️</button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       );
@@ -927,8 +1002,32 @@ export default function SaymanStore() {
                   {label} ({productsData[k].length})
                 </button>
               ))}
+              <label style={{ ...S.btn("#f2f1ed", "#444"), padding: "10px 16px", fontSize: 13.5, marginLeft: "auto", cursor: "pointer" }} title="Файл CSV: Название;Категория;Цена;Ед;Эмодзи (первая строка — заголовок)">
+                📄 Импорт CSV
+                <input type="file" accept=".csv,text/csv" style={{ display: "none" }}
+                  onChange={(e) => {
+                    const f = e.target.files[0]; if (!f) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const text = String(reader.result);
+                      const lines = text.split(/\r?\n/).filter((l) => l.trim());
+                      const delim = (lines[0] || "").includes(";") ? ";" : ",";
+                      let rows = lines.map((l) => l.split(delim).map((c) => c.trim().replace(/^"|"$/g, "")));
+                      if (rows[0] && isNaN(Number(rows[0][2]))) rows = rows.slice(1);
+                      const good = rows.filter((r) => r[0] && Number(r[2]) > 0);
+                      if (!good.length) return alert("Не удалось прочитать файл. Формат: Название;Категория;Цена;Ед;Эмодзи");
+                      if (!window.confirm("Добавить " + good.length + " товар(ов) в раздел «" + secTheme.label + "»?")) return;
+                      const items = good.map((r, i) => ({ id: adminSection[0] + Date.now() + "i" + i, name: r[0], cat: r[1] || "Разное", price: Number(r[2]), unit: r[3] || "шт", emoji: r[4] || "🛒" }));
+                      Promise.all(items.map((p) => rpc("admin_upsert_product", { _pin: staffPin, _p: productToRow(adminSection, p) })))
+                        .then(() => { setProductsData((prev) => ({ ...prev, [adminSection]: [...items, ...prev[adminSection]] })); alert("Импортировано: " + items.length); })
+                        .catch(() => alert("Часть товаров могла не сохраниться — обновите страницу и проверьте"));
+                    };
+                    reader.readAsText(f, "utf-8");
+                    e.target.value = "";
+                  }} />
+              </label>
               <button onClick={() => setNewProd({ name: "", cat: "", price: "", unit: "шт", emoji: "🛒" })}
-                style={{ ...S.btn("#1B1B18"), padding: "10px 18px", fontSize: 14, marginLeft: "auto" }}>
+                style={{ ...S.btn("#1B1B18"), padding: "10px 18px", fontSize: 14 }}>
                 + Добавить товар
               </button>
             </div>
@@ -999,6 +1098,12 @@ export default function SaymanStore() {
                     <input key={p.id + "-p" + p.price} type="number" defaultValue={p.price}
                       onBlur={(e) => Number(e.target.value) > 0 && updateProduct(adminSection, p.id, { price: Number(e.target.value) })}
                       style={{ ...inp, width: 90, fontWeight: 800 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10.5, color: "#999", fontWeight: 700 }}>ОСТАТОК</div>
+                    <input key={p.id + "-s" + (p.stock ?? "")} type="number" defaultValue={p.stock ?? ""}
+                      onBlur={(e) => updateProduct(adminSection, p.id, { stock: e.target.value === "" ? null : Math.max(0, Number(e.target.value)) })}
+                      style={{ ...inp, width: 76 }} placeholder="∞" title="Пусто — не отслеживать остаток" />
                   </div>
                   <div>
                     <div style={{ fontSize: 10.5, color: "#999", fontWeight: 700 }}>СТАР. ЦЕНА</div>
@@ -1302,15 +1407,31 @@ export default function SaymanStore() {
           <label style={lbl}>{t("comment")}</label>
           <textarea style={{ ...inp, minHeight: 70 }} value={order.comment} onChange={(e) => setOrder({ ...order, comment: e.target.value })} placeholder={t("commentPh")} />
 
+          <label style={lbl}>{t("promoL")}</label>
+          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+            <input style={{ ...inp, marginTop: 0, textTransform: "uppercase" }} placeholder={t("promoPh")} value={promoInput}
+              onChange={(e) => { setPromoInput(e.target.value); if (promoApplied) setPromoApplied(null); }} />
+            <button style={{ ...S.btn(promoApplied ? "#1E7A46" : "#1B1B18"), padding: "12px 18px", fontSize: 14, whiteSpace: "nowrap" }}
+              onClick={async () => {
+                if (!promoInput.trim()) return;
+                try {
+                  const res = await rpc("check_promo", { _code: promoInput, _total: cartTotal });
+                  setPromoApplied(res);
+                  alert(t("promoApplied") + " −" + fmt(res.discount));
+                } catch (e) { setPromoApplied(null); alert(String(e.message || "Промокод не действует").slice(0, 120)); }
+              }}>{promoApplied ? "✓" : t("applyP")}</button>
+          </div>
+
           <div style={{ background: "#fff", borderRadius: 14, padding: 18, marginTop: 24, border: "1px solid #eee" }}>
             <Row label={t("items")} val={fmt(cartTotal)} />
+            {discount > 0 && <Row label={t("discountL") + " (" + promoApplied.code + ")"} val={"−" + fmt(discount)} />}
             <Row label={t("delivery")} val={order.type === "pickup" ? "—" : deliveryFee ? fmt(deliveryFee) : t("free")} />
             <div style={{ borderTop: "1px dashed #ddd", margin: "10px 0" }} />
-            <Row label={t("total")} val={fmt(cartTotal + deliveryFee)} bold />
+            <Row label={t("total")} val={fmt(grandTotal)} bold />
           </div>
 
           <button style={{ ...S.btn(theme.accent), width: "100%", marginTop: 18, padding: "16px" }} onClick={submitOrder}>
-            {t("confirm")} · {fmt(cartTotal + deliveryFee)}
+            {t("confirm")} · {fmt(grandTotal)}
           </button>
         </div>
       </div>
@@ -1430,10 +1551,11 @@ export default function SaymanStore() {
             const qty = cart[p.id] || 0;
             return (
               <div key={p.id} style={{ background: "#fff", borderRadius: 16, padding: 14, display: "flex", flexDirection: "column", boxShadow: "0 1px 4px rgba(0,0,0,.05)", animation: "fadeUp .3s ease", position: "relative" }}>
-                {(p.oldPrice || p.hit) && (
+                {(p.oldPrice || p.hit || (p.stock != null && p.stock > 0 && p.stock <= 5)) && (
                   <div style={{ position: "absolute", top: 10, left: 10, zIndex: 2, display: "flex", gap: 4 }}>
                     {p.oldPrice && <span style={{ background: "#C7411A", color: "#fff", borderRadius: 99, fontSize: 11, fontWeight: 800, padding: "3px 8px" }}>−{Math.round((1 - p.price / p.oldPrice) * 100)}%</span>}
                     {p.hit && <span style={{ background: "#1B1B18", color: "#fff", borderRadius: 99, fontSize: 11, fontWeight: 800, padding: "3px 8px" }}>🔥 Хит</span>}
+                    {p.stock != null && p.stock > 0 && p.stock <= 5 && <span style={{ background: "#fff", color: "#C7411A", border: "1.5px solid #C7411A", borderRadius: 99, fontSize: 11, fontWeight: 800, padding: "2px 8px" }}>{t("leftN")}: {p.stock}</span>}
                   </div>
                 )}
                 <div style={{ textAlign: "center", background: theme.accentSoft, borderRadius: 12, transition: "background .35s", overflow: "hidden", height: 92, display: "flex", alignItems: "center", justifyContent: "center" }}>
