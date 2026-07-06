@@ -311,6 +311,7 @@ export default function SaymanStore() {
   const [subDraft, setSubDraft] = useState(null);
   const [adminSubs, setAdminSubs] = useState([]);
   const [subItemSearch, setSubItemSearch] = useState("");
+  const [subDayFilter, setSubDayFilter] = useState(0);
   const [linkCode, setLinkCode] = useState("");
   const [claimInput, setClaimInput] = useState("");
   const [promoInput, setPromoInput] = useState("");
@@ -375,7 +376,7 @@ export default function SaymanStore() {
     return () => { clearInterval(t); supaRT.removeChannel(ch); };
   }, [staffAuth, screen, staffPin]);
   useEffect(() => {
-    if (staffAuth && staffRole === "admin" && adminTab === "clients") {
+    if (staffAuth && staffRole === "admin" && (adminTab === "clients" || adminTab === "subs")) {
       rpc("admin_get_subs", { _pin: staffPin }).then(setAdminSubs).catch(() => {});
     }
     if (staffAuth && staffRole === "admin" && adminTab === "settings") {
@@ -876,7 +877,7 @@ export default function SaymanStore() {
           </div>
         </div>
         <div style={{ ...S.wrap, display: "flex", gap: 6, paddingBottom: 12 }}>
-          {[["orders", "📦 Заказы"], ["products", "🏷️ Товары"], ["stats", "📊 Аналитика"], ["clients", "👥 Клиенты"], ["settings", "⚙️ Настройки"]].map(([k, label]) => (
+          {[["orders", "📦 Заказы"], ["products", "🏷️ Товары"], ["subs", "🔁 Регулярные"], ["stats", "📊 Аналитика"], ["clients", "👥 Клиенты"], ["settings", "⚙️ Настройки"]].map(([k, label]) => (
             <button key={k} onClick={() => setAdminTab(k)}
               style={{ background: adminTab === k ? "#fff" : "rgba(255,255,255,.12)", color: adminTab === k ? "#1B1B18" : "#fff", border: "none", borderRadius: 10, padding: "9px 16px", fontWeight: 800, fontSize: 13.5 }}>
               {label}
@@ -1093,6 +1094,110 @@ export default function SaymanStore() {
                     rpc("admin_delete_promo", { _pin: staffPin, _code: p.code })
                       .then(() => setPromos(promos.filter((x) => x.code !== p.code))).catch(dbFail);
                   }} style={{ background: "#FBE9E4", border: "none", borderRadius: 8, padding: "7px 10px", fontSize: 13 }}>🗑️</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── вкладка Регулярные доставки ──
+    if (adminTab === "subs") {
+      const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+      const activeSubs = adminSubs.filter((s) => s.active);
+      const [selDay, setSel] = [subDayFilter, setSubDayFilter];
+      const relevant = selDay === 0 ? activeSubs : activeSubs.filter((s) => (s.days || []).includes(selDay));
+      // Свод по товарам
+      const agg = {};
+      relevant.forEach((s) => (s.items || []).forEach((i) => {
+        agg[i.id] = agg[i.id] || { name: i.name, emoji: i.emoji, unit: i.unit, qty: 0, clients: 0 };
+        agg[i.id].qty += i.qty; agg[i.id].clients += 1;
+      }));
+      const goods = Object.values(agg).sort((a, b) => b.qty - a.qty);
+      // Сколько доставок в каждый день недели
+      const perDay = DOW.map((_, idx) => activeSubs.filter((s) => (s.days || []).includes(idx + 1)).length);
+      const card = { background: "#fff", borderRadius: 16, padding: 18, marginBottom: 14 };
+      return (
+        <div style={S.page}>
+          <style>{FONTS}</style>
+          {adminHeader}
+          <div style={{ ...S.wrap, maxWidth: 720, paddingTop: 20, paddingBottom: 60 }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+              <div style={{ ...card, flex: "1 1 150px", marginBottom: 0 }}>
+                <div style={{ fontSize: 11.5, color: "#999", fontWeight: 800, textTransform: "uppercase" }}>Активных подписок</div>
+                <div style={{ fontFamily: "'Unbounded'", fontSize: 22, fontWeight: 700, marginTop: 4 }}>{activeSubs.length}</div>
+              </div>
+              <div style={{ ...card, flex: "1 1 150px", marginBottom: 0 }}>
+                <div style={{ fontSize: 11.5, color: "#999", fontWeight: 800, textTransform: "uppercase" }}>Всего подписок</div>
+                <div style={{ fontFamily: "'Unbounded'", fontSize: 22, fontWeight: 700, marginTop: 4 }}>{adminSubs.length}</div>
+              </div>
+            </div>
+
+            <div style={card}>
+              <div style={{ fontWeight: 800, marginBottom: 10 }}>Доставок по дням недели</div>
+              {DOW.map((d, idx) => {
+                const mx = Math.max(...perDay, 1);
+                return (
+                  <div key={d} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, width: 34 }}>{d}</span>
+                    <div style={{ flex: 1, background: "#f2f1ed", borderRadius: 6, height: 18, overflow: "hidden" }}>
+                      <div style={{ width: (perDay[idx] / mx * 100) + "%", background: "#1E7A46", height: "100%", borderRadius: 6 }} />
+                    </div>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, width: 34, textAlign: "right" }}>{perDay[idx]}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={card}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                <div style={{ fontWeight: 800 }}>Нужно подготовить товаров</div>
+                <select value={selDay} onChange={(e) => setSel(Number(e.target.value))}
+                  style={{ padding: "8px 12px", borderRadius: 10, border: "1.5px solid #ddd", fontSize: 13.5, fontWeight: 700, background: "#fff" }}>
+                  <option value={0}>Все дни (сумма)</option>
+                  {DOW.map((d, idx) => <option key={d} value={idx + 1}>Только {d}</option>)}
+                </select>
+              </div>
+              {goods.length === 0 && <div style={{ color: "#999", fontSize: 14 }}>Нет активных регулярных доставок{selDay ? " на этот день" : ""}. Появятся, когда клиенты оформят подписки.</div>}
+              {goods.map((g) => (
+                <div key={g.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid #f4f3ef" }}>
+                  <span style={{ fontSize: 22 }}>{g.emoji}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14.5 }}>{g.name}</div>
+                    <div style={{ fontSize: 12, color: "#999" }}>для {g.clients} клиент(ов)</div>
+                  </div>
+                  <div style={{ fontFamily: "'Unbounded'", fontWeight: 700, fontSize: 18 }}>{g.qty} <span style={{ fontSize: 12, color: "#999", fontWeight: 600 }}>{g.unit}</span></div>
+                </div>
+              ))}
+            </div>
+
+            <div style={card}>
+              <div style={{ fontWeight: 800, marginBottom: 10 }}>Все регулярные доставки</div>
+              {adminSubs.length === 0 && <div style={{ color: "#999", fontSize: 14 }}>Пока нет</div>}
+              {adminSubs.map((s) => (
+                <div key={s.id} style={{ padding: "10px 0", borderBottom: "1px solid #f4f3ef", opacity: s.active ? 1 : 0.5 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                    <div>
+                      <b style={{ fontSize: 14 }}>{s.name || "Клиент"}</b>
+                      <span style={{ color: "#888", fontSize: 13, marginLeft: 8 }}>{s.phone}</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "#1E7A46" }}>{(s.days || []).sort().map((d) => DOW[d - 1]).join(",")}</span>
+                      <span style={{ fontSize: 12.5, color: "#888" }}>{s.slot}</span>
+                      <a href={"https://wa.me/" + String(s.phone || "").replace(/\D/g, "")} target="_blank" rel="noreferrer"
+                        style={{ background: "#25D366", color: "#fff", borderRadius: 8, padding: "6px 9px", fontSize: 13, textDecoration: "none" }}>💬</a>
+                      <label style={{ fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
+                        <input type="checkbox" checked={s.active}
+                          onChange={(e) => rpc("admin_set_sub", { _pin: staffPin, _id: s.id, _active: e.target.checked })
+                            .then(() => setAdminSubs(adminSubs.map((x) => x.id === s.id ? { ...x, active: e.target.checked } : x))).catch(dbFail)}
+                          style={{ width: 16, height: 16, accentColor: "#1E7A46" }} />
+                      </label>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "#888", marginTop: 3 }}>
+                    {(s.items || []).map((i) => i.name + "×" + i.qty).join(", ")} → {s.address}
+                  </div>
                 </div>
               ))}
             </div>
