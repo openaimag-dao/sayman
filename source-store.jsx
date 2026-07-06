@@ -157,10 +157,9 @@ const I18N = {
     subSaved: "Готово! Заказ будет создаваться автоматически по выбранным дням.",
     subActive: "активна", subEmpty: "Нажмите «Сделать регулярным» у любого заказа — и он начнёт приезжать по расписанию.",
     dow: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
-    subsTitle: "Регулярные доставки", subsNote: "Заказ создаётся автоматически в выбранные дни — вам ничего не нужно делать",
-    makeSub: "🔁 Повторять регулярно", subDays: "В какие дни привозить?", subSave: "Включить регулярную доставку",
-    subOk: "Готово! Заказ будет создаваться автоматически в выбранные дни.", subDel: "Удалить эту регулярную доставку?",
-    subActive: "активна", days1: ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"],
+    subCreate: "➕ Создать регулярную доставку", subEdit: "Изменить состав", subAddItem: "Добавить товар",
+    subItems: "Состав доставки", subSearch: "Найти товар…", subPickItems: "Выберите товары для регулярной доставки",
+    subEmpty2: "Пока не добавлено ни одного товара", subDone: "Готово",
   },
   kk: {
     sec_food: "Азық-түлік", sec_build: "Құрылыс материалдары",
@@ -207,10 +206,10 @@ const I18N = {
     subSaved: "Дайын! Тапсырыс таңдалған күндері автоматты түрде жасалады.",
     subActive: "белсенді", subEmpty: "«Тұрақты ету» түймесін басыңыз — тапсырыс кесте бойынша келіп тұрады.",
     dow: ["Дс", "Сс", "Ср", "Бс", "Жм", "Сб", "Жс"],
+    subCreate: "➕ Тұрақты жеткізу жасау", subEdit: "Құрамын өзгерту", subAddItem: "Тауар қосу",
+    subItems: "Жеткізу құрамы", subSearch: "Тауар табу…", subPickItems: "Тұрақты жеткізуге тауарларды таңдаңыз",
+    subEmpty2: "Әзірше бірде-бір тауар қосылмады", subDone: "Дайын",
     subsTitle: "Тұрақты жеткізулер", subsNote: "Таңдалған күндері тапсырыс автоматты түрде жасалады",
-    makeSub: "🔁 Тұрақты қайталау", subDays: "Қай күндері жеткізейік?", subSave: "Тұрақты жеткізуді қосу",
-    subOk: "Дайын! Тапсырыс таңдалған күндері өздігінен жасалады.", subDel: "Осы тұрақты жеткізуді өшіру керек пе?",
-    subActive: "белсенді", days1: ["Дс","Сс","Ср","Бс","Жм","Сб","Жс"],
   },
 };
 
@@ -311,7 +310,7 @@ export default function SaymanStore() {
   const [mySubs, setMySubs] = useState([]);
   const [subDraft, setSubDraft] = useState(null);
   const [adminSubs, setAdminSubs] = useState([]);
-  const [subEditor, setSubEditor] = useState(null); // { orderId, days: [], slot }
+  const [subItemSearch, setSubItemSearch] = useState("");
   const [linkCode, setLinkCode] = useState("");
   const [claimInput, setClaimInput] = useState("");
   const [promoInput, setPromoInput] = useState("");
@@ -1489,6 +1488,100 @@ export default function SaymanStore() {
   );
   }
 
+  // Редактор состава регулярной доставки (создание и правка)
+  const saveSubDraft = async () => {
+    if (!subDraft) return;
+    if (!subDraft.items.length) return alert(t("subEmpty2"));
+    if (!subDraft.days.length) return alert(t("subDays") + "!");
+    if (!subDraft.address.trim()) return alert(t("address") + "!");
+    const cleanItems = subDraft.items.map(({ id, name, qty, price, unit, emoji }) => ({ id, name, qty, price, unit, emoji }));
+    try {
+      if (subDraft.id === "new") {
+        await rpc("client_upsert_sub", { _cid: getClientId(), _s: {
+          name: order.name, phone: order.phone, address: subDraft.address,
+          zone: subDraft.zone || (zonesArr[0] && zonesArr[0].name) || "", slot: subDraft.slot,
+          pay: order.pay || "kaspi", items: cleanItems, days: subDraft.days.map(String),
+        }});
+      } else {
+        await rpc("client_upsert_sub", { _cid: getClientId(), _s: {
+          id: String(subDraft.id), address: subDraft.address, zone: subDraft.zone,
+          slot: subDraft.slot, days: subDraft.days.map(String), active: true,
+        }});
+        await rpc("client_update_sub_items", { _cid: getClientId(), _id: subDraft.id, _items: cleanItems });
+      }
+      setSubDraft(null);
+      loadMyOrders();
+      alert(t("subSaved"));
+    } catch { alert("Не удалось сохранить — попробуйте позже"); }
+  };
+  const subSetQty = (id, d) => setSubDraft((sd) => {
+    const items = sd.items.map((i) => i.id === id ? { ...i, qty: Math.max(0, i.qty + d) } : i).filter((i) => i.qty > 0);
+    return { ...sd, items };
+  });
+  const subAddItem = (p) => setSubDraft((sd) => {
+    if (sd.items.find((i) => i.id === p.id)) return { ...sd, items: sd.items.map((i) => i.id === p.id ? { ...i, qty: i.qty + 1 } : i) };
+    return { ...sd, items: [...sd.items, { id: p.id, name: p.name, qty: 1, price: p.price, unit: p.unit, emoji: p.emoji }] };
+  });
+  const subEditor = (which) => {
+    if (!subDraft || subDraft.id !== which) return null;
+    const bs = { width: "100%", padding: "10px 12px", borderRadius: 10, border: "1.5px solid #ddd", fontSize: 14, background: "#fff" };
+    const q = subItemSearch.toLowerCase().trim();
+    const found = q ? [...productsData.food, ...productsData.build].filter((p) => p.available !== false && (p.stock == null || p.stock > 0) && p.name.toLowerCase().includes(q)).slice(0, 8) : [];
+    const total = subDraft.items.reduce((s, i) => s + i.qty * i.price, 0);
+    return (
+      <div style={{ marginTop: 12, padding: 14, background: "#F6F5F2", borderRadius: 12 }}>
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>{t("subItems")}</div>
+        {subDraft.items.length === 0 && <p style={{ fontSize: 13, color: "#999", marginBottom: 8 }}>{t("subEmpty2")}</p>}
+        {subDraft.items.map((i) => (
+          <div key={i.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #eceae4" }}>
+            <span style={{ fontSize: 20 }}>{i.emoji}</span>
+            <div style={{ flex: 1, fontSize: 13.5, fontWeight: 600 }}>{i.name}<div style={{ fontSize: 11.5, color: "#999" }}>{fmt(i.price)} / {i.unit}</div></div>
+            <button onClick={() => subSetQty(i.id, -1)} style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 8, width: 28, height: 28, fontWeight: 800 }}>−</button>
+            <span style={{ fontWeight: 800, minWidth: 18, textAlign: "center" }}>{i.qty}</span>
+            <button onClick={() => subSetQty(i.id, 1)} style={{ background: theme.accent, color: "#fff", border: "none", borderRadius: 8, width: 28, height: 28, fontWeight: 800 }}>+</button>
+          </div>
+        ))}
+        {subDraft.items.length > 0 && <div style={{ textAlign: "right", fontWeight: 800, fontSize: 14, marginTop: 8 }}>{fmt(total)}</div>}
+
+        <input value={subItemSearch} onChange={(e) => setSubItemSearch(e.target.value)} placeholder={t("subSearch")} style={{ ...bs, marginTop: 12 }} />
+        {found.map((p) => (
+          <div key={p.id} onClick={() => subAddItem(p)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 6px", cursor: "pointer", borderBottom: "1px solid #eceae4" }}>
+            <span style={{ fontSize: 18 }}>{p.emoji}</span>
+            <span style={{ flex: 1, fontSize: 13.5 }}>{p.name}</span>
+            <span style={{ fontSize: 12.5, color: "#888" }}>{fmt(p.price)}</span>
+            <span style={{ background: theme.accent, color: "#fff", borderRadius: 7, width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800 }}>+</span>
+          </div>
+        ))}
+
+        <div style={{ fontWeight: 800, fontSize: 14, marginTop: 14 }}>{t("subDays")}</div>
+        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+          {t("dow").map((d, idx) => {
+            const day = idx + 1;
+            const on = subDraft.days.includes(day);
+            return (
+              <button key={day} onClick={() => setSubDraft({ ...subDraft, days: on ? subDraft.days.filter((x) => x !== day) : [...subDraft.days, day] })}
+                style={{ width: 42, height: 38, borderRadius: 10, border: "none", fontWeight: 800, fontSize: 13, background: on ? theme.accent : "#fff", color: on ? "#fff" : "#666" }}>{d}</button>
+            );
+          })}
+        </div>
+        <div style={{ fontWeight: 800, fontSize: 14, marginTop: 12 }}>{t("subSlot")}</div>
+        <select value={subDraft.slot} onChange={(e) => setSubDraft({ ...subDraft, slot: e.target.value })} style={{ ...bs, marginTop: 6 }}>
+          {["Утро 10:00–12:00", "День 14:00–16:00", "Вечер 18:00–20:00"].map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        {zonesArr.length > 0 && (
+          <select value={subDraft.zone} onChange={(e) => setSubDraft({ ...subDraft, zone: e.target.value })} style={{ ...bs, marginTop: 8 }}>
+            {zonesArr.map((z) => <option key={z.name} value={z.name}>{z.name} · {fmt(z.fee)}</option>)}
+          </select>
+        )}
+        <input value={subDraft.address} onChange={(e) => setSubDraft({ ...subDraft, address: e.target.value })} placeholder={t("address")} style={{ ...bs, marginTop: 8 }} />
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <button onClick={saveSubDraft} style={{ ...S.btn(theme.accent), flex: 1, padding: 12, fontSize: 14 }}>{t("subSave")}</button>
+          <button onClick={() => setSubDraft(null)} style={{ ...S.btn("#fff", "#666"), padding: 12, fontSize: 14 }}>✕</button>
+        </div>
+      </div>
+    );
+  };
+
   // ── личный кабинет клиента ──
   if (screen === "account") {
     const inp = { width: "100%", padding: "12px 14px", borderRadius: 12, border: "1.5px solid #ddd", fontSize: 15, marginTop: 6, background: "#fff" };
@@ -1539,7 +1632,7 @@ export default function SaymanStore() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, gap: 8, flexWrap: "wrap" }}>
                   <b style={{ fontSize: 16 }}>{fmt(o.total)}</b>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => setSubDraft({ items: (o.items || []).filter((i) => !i.missing), days: [], slot: "Утро 10:00–12:00", address: o.address || order.address, zone: o.zone || "", num: o.num })}
+                    <button onClick={() => { setSubDraft({ id: "new", items: (o.items || []).filter((i) => !i.missing).map((i) => ({ ...i })), days: [], slot: "Утро 10:00–12:00", address: o.address || order.address || "", zone: o.zone || (zonesArr[0] && zonesArr[0].name) || "" }); setSubItemSearch(""); setTimeout(() => document.querySelector("#sub-anchor")?.scrollIntoView({ behavior: "smooth" }), 100); }}
                       style={{ ...S.btn("#fff", theme.accentDark), padding: "9px 12px", fontSize: 13, border: "1.5px dashed " + theme.accent }}>
                       {t("makeSub")}
                     </button>
@@ -1548,48 +1641,7 @@ export default function SaymanStore() {
                     </button>
                   </div>
                 </div>
-                {subDraft && subDraft.num === o.num && (
-                  <div style={{ marginTop: 12, padding: 14, background: "#F6F5F2", borderRadius: 12 }}>
-                    <div style={{ fontWeight: 800, fontSize: 14 }}>{t("subDays")}</div>
-                    <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                      {t("dow").map((d, i) => {
-                        const day = i + 1;
-                        const on = subDraft.days.includes(day);
-                        return (
-                          <button key={day} onClick={() => setSubDraft({ ...subDraft, days: on ? subDraft.days.filter((x) => x !== day) : [...subDraft.days, day] })}
-                            style={{ width: 42, height: 38, borderRadius: 10, border: "none", fontWeight: 800, fontSize: 13, background: on ? theme.accent : "#fff", color: on ? "#fff" : "#666" }}>
-                            {d}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div style={{ fontWeight: 800, fontSize: 14, marginTop: 12 }}>{t("subSlot")}</div>
-                    <select value={subDraft.slot} onChange={(e) => setSubDraft({ ...subDraft, slot: e.target.value })}
-                      style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #ddd", fontSize: 14, marginTop: 6, background: "#fff" }}>
-                      {["Утро 10:00–12:00", "День 14:00–16:00", "Вечер 18:00–20:00"].map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <input value={subDraft.address} onChange={(e) => setSubDraft({ ...subDraft, address: e.target.value })} placeholder={t("address")}
-                      style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #ddd", fontSize: 14, marginTop: 8, background: "#fff" }} />
-                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                      <button style={{ ...S.btn(theme.accent), flex: 1, padding: 12, fontSize: 14 }}
-                        onClick={async () => {
-                          if (!subDraft.days.length) return alert(t("subDays") + "!");
-                          if (!subDraft.address.trim()) return alert(t("address") + "!");
-                          try {
-                            await rpc("client_upsert_sub", { _cid: getClientId(), _s: {
-                              name: order.name, phone: order.phone, address: subDraft.address,
-                              zone: subDraft.zone || (zonesArr[0] && zonesArr[0].name) || "", slot: subDraft.slot,
-                              pay: order.pay || "kaspi", items: subDraft.items, days: subDraft.days.map(String),
-                            }});
-                            setSubDraft(null);
-                            loadMyOrders();
-                            alert(t("subSaved"));
-                          } catch { alert("Не удалось сохранить — попробуйте позже"); }
-                        }}>{t("subSave")}</button>
-                      <button style={{ ...S.btn("#fff", "#666"), padding: 12, fontSize: 14 }} onClick={() => setSubDraft(null)}>✕</button>
-                    </div>
-                  </div>
-                )}
+                
               </div>
             );
           })}
@@ -1600,10 +1652,12 @@ export default function SaymanStore() {
           )}
 
           <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginTop: 8 }}>
-            <div style={{ fontWeight: 800, marginBottom: 4 }}>🔁 {t("subTitle")}</div>
+            <div id="sub-anchor" style={{ fontWeight: 800, marginBottom: 4 }}>🔁 {t("subTitle")}</div>
             <p style={{ fontSize: 12.5, color: "#999" }}>{t("subNote")}</p>
-            {mySubs.length === 0 && <p style={{ fontSize: 13.5, color: "#888", marginTop: 10 }}>{t("subEmpty")}</p>}
-            {mySubs.map((s) => (
+            {mySubs.length === 0 && !(subDraft && subDraft.id === "new") && <p style={{ fontSize: 13.5, color: "#888", marginTop: 10 }}>{t("subEmpty")}</p>}
+            {mySubs.map((s) => {
+              const editing = subDraft && subDraft.id === s.id;
+              return (
               <div key={s.id} style={{ padding: "12px 0", borderBottom: "1px solid #f4f3ef" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>
@@ -1620,17 +1674,29 @@ export default function SaymanStore() {
                         }} style={{ width: 17, height: 17, accentColor: "#1E7A46" }} />
                       {t("subActive")}
                     </label>
+                    <button onClick={() => { if (editing) { setSubDraft(null); } else { setSubDraft({ id: s.id, items: (s.items || []).map((i) => ({ ...i })), days: [...(s.days || [])], slot: s.slot, address: s.address, zone: s.zone }); setSubItemSearch(""); } }}
+                      style={{ background: editing ? theme.accent : "#f2f1ed", color: editing ? "#fff" : "#444", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 13, fontWeight: 700 }}>✏️</button>
                     <button onClick={async () => {
-                      if (!window.confirm("✕?")) return;
-                      try { await rpc("client_delete_sub", { _cid: getClientId(), _id: s.id }); setMySubs(mySubs.filter((x) => x.id !== s.id)); } catch {}
+                      if (!window.confirm("Удалить регулярную доставку?")) return;
+                      try { await rpc("client_delete_sub", { _cid: getClientId(), _id: s.id }); setMySubs(mySubs.filter((x) => x.id !== s.id)); if (editing) setSubDraft(null); } catch {}
                     }} style={{ background: "#f2f1ed", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 13 }}>🗑️</button>
                   </div>
                 </div>
-                <div style={{ fontSize: 12.5, color: "#888", marginTop: 4 }}>
-                  {(s.items || []).slice(0, 4).map((i) => i.name + " ×" + i.qty).join(", ")}{(s.items || []).length > 4 ? "…" : ""} → {s.address}
-                </div>
+                {!editing && (
+                  <div style={{ fontSize: 12.5, color: "#888", marginTop: 4 }}>
+                    {(s.items || []).slice(0, 4).map((i) => i.name + " ×" + i.qty).join(", ")}{(s.items || []).length > 4 ? "…" : ""} → {s.address}
+                  </div>
+                )}
+                {editing && subEditor(s.id)}
               </div>
-            ))}
+              );
+            })}
+            {subDraft && subDraft.id === "new" ? subEditor("new") : (
+              <button onClick={() => { setSubDraft({ id: "new", items: [], days: [], slot: "Утро 10:00–12:00", address: order.address || "", zone: (zonesArr[0] && zonesArr[0].name) || "" }); setSubItemSearch(""); }}
+                style={{ ...S.btn(theme.accentSoft, theme.accentDark), width: "100%", marginTop: 14, padding: 13, fontSize: 14 }}>
+                {t("subCreate")}
+              </button>
+            )}
           </div>
 
           <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginTop: 16 }}>
