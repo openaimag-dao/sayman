@@ -312,6 +312,8 @@ export default function SaymanStore() {
   const [adminSubs, setAdminSubs] = useState([]);
   const [subItemSearch, setSubItemSearch] = useState("");
   const [subDayFilter, setSubDayFilter] = useState(0);
+  const [manualOrder, setManualOrder] = useState(null);
+  const [manualSearch, setManualSearch] = useState("");
   const [linkCode, setLinkCode] = useState("");
   const [claimInput, setClaimInput] = useState("");
   const [promoInput, setPromoInput] = useState("");
@@ -419,6 +421,35 @@ export default function SaymanStore() {
     try { await loadAdminOrders(pin); setStaffPin(pin); setStaffAuth(true); setPinInput(""); }
     catch { setPinInput(""); alert("Неверный PIN-код (или нет связи с базой)"); }
   };
+  const createManualOrder = async () => {
+    const mo = manualOrder;
+    if (!mo.items.length) return alert("Добавьте хотя бы один товар");
+    if (!mo.name.trim() || mo.phone.replace(/\D/g, "").length < 10) return alert("Укажите имя и телефон клиента");
+    if (mo.type === "delivery" && !mo.address.trim()) return alert("Укажите адрес доставки");
+    const goods = mo.items.reduce((s, i) => s + i.qty * i.price, 0);
+    const zfee = mo.type === "delivery" ? ((zonesArr.find((z) => z.name === mo.zone) || {}).fee ?? settings.delivery_fee) : 0;
+    const delivery = mo.type === "delivery" && goods < settings.free_from ? zfee : 0;
+    const total = goods + delivery;
+    const num = "SM-T" + Math.floor(1000 + Math.random() * 9000);
+    try {
+      await sPost("orders", {
+        num, name: mo.name, phone: mo.phone, type: mo.type,
+        address: mo.address, pay: mo.pay, comment: (mo.comment ? mo.comment + " " : "") + "☎ Заказ по телефону",
+        slot: mo.type === "delivery" ? mo.slot : null, zone: mo.type === "delivery" ? mo.zone : null,
+        items: mo.items.map(({ id, name, qty, price, unit, emoji }) => ({ id, name, qty, price, unit, emoji })),
+        total, status: "accepted",
+      }, { Prefer: "return=minimal" });
+      setManualOrder(null); setManualSearch("");
+      loadAdminOrders(staffPin).catch(() => {});
+      alert("Заказ " + num + " создан! Он появился в списке и передан в сборку.");
+    } catch { alert("Не удалось создать заказ — проверьте связь и повторите"); }
+  };
+  const moАdd = (p) => setManualOrder((mo) => {
+    const ex = mo.items.find((i) => i.id === p.id);
+    return { ...mo, items: ex ? mo.items.map((i) => i.id === p.id ? { ...i, qty: i.qty + 1 } : i) : [...mo.items, { id: p.id, name: p.name, qty: 1, price: p.price, unit: p.unit, emoji: p.emoji }] };
+  });
+  const moQty = (id, d) => setManualOrder((mo) => ({ ...mo, items: mo.items.map((i) => i.id === id ? { ...i, qty: Math.max(0, i.qty + d) } : i).filter((i) => i.qty > 0) }));
+
   const notifyClient = (o) => {
     const phone = String(o.phone || "").replace(/\D/g, "");
     if (phone.length < 10) return alert("У заказа нет корректного номера клиента");
@@ -1611,7 +1642,80 @@ export default function SaymanStore() {
             </div>
           );
         })()}
-        <input value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} placeholder="Поиск: номер заказа, телефон или имя…"
+        {!manualOrder ? (
+          <button onClick={() => setManualOrder({ items: [], name: "", phone: "", type: "delivery", address: "", zone: (zonesArr[0] && zonesArr[0].name) || "", slot: "Ближайшее время (60–90 мин)", pay: "cash", comment: "" })}
+            style={{ ...S.btn("#1E7A46"), width: "100%", marginBottom: 14, padding: 14, fontSize: 15 }}>
+            ☎ Создать заказ по телефону
+          </button>
+        ) : (() => {
+          const mi = { width: "100%", padding: "11px 13px", borderRadius: 10, border: "1.5px solid #ddd", fontSize: 14.5, background: "#fff", marginTop: 8 };
+          const q = manualSearch.toLowerCase().trim();
+          const found = q ? [...productsData.food, ...productsData.build].filter((p) => p.available !== false && (p.stock == null || p.stock > 0) && p.name.toLowerCase().includes(q)).slice(0, 8) : [];
+          const goods = manualOrder.items.reduce((s, i) => s + i.qty * i.price, 0);
+          const zfee = manualOrder.type === "delivery" ? ((zonesArr.find((z) => z.name === manualOrder.zone) || {}).fee ?? settings.delivery_fee) : 0;
+          const delivery = manualOrder.type === "delivery" && goods < settings.free_from ? zfee : 0;
+          return (
+          <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginBottom: 16, border: "2px solid #1E7A46" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontFamily: "'Unbounded'", fontWeight: 700, fontSize: 17 }}>☎ Заказ по телефону</div>
+              <button onClick={() => { setManualOrder(null); setManualSearch(""); }} style={{ background: "#f2f1ed", border: "none", borderRadius: 10, width: 34, height: 34, fontSize: 16 }}>✕</button>
+            </div>
+
+            <div style={{ fontWeight: 800, fontSize: 14, marginTop: 12 }}>Товары</div>
+            {manualOrder.items.map((i) => (
+              <div key={i.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f4f3ef" }}>
+                <span style={{ fontSize: 20 }}>{i.emoji}</span>
+                <div style={{ flex: 1, fontSize: 13.5, fontWeight: 600 }}>{i.name}<div style={{ fontSize: 11.5, color: "#999" }}>{fmt(i.price)} / {i.unit}</div></div>
+                <button onClick={() => moQty(i.id, -1)} style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 8, width: 28, height: 28, fontWeight: 800 }}>−</button>
+                <span style={{ fontWeight: 800, minWidth: 18, textAlign: "center" }}>{i.qty}</span>
+                <button onClick={() => moQty(i.id, 1)} style={{ background: "#1E7A46", color: "#fff", border: "none", borderRadius: 8, width: 28, height: 28, fontWeight: 800 }}>+</button>
+              </div>
+            ))}
+            {manualOrder.items.length > 0 && <div style={{ textAlign: "right", fontWeight: 800, fontSize: 15, marginTop: 8 }}>Товары: {fmt(goods)}{delivery ? " + доставка " + fmt(delivery) : ""}</div>}
+            <input value={manualSearch} onChange={(e) => setManualSearch(e.target.value)} placeholder="Найти товар для добавления…" style={{ ...mi, marginTop: 12 }} />
+            {found.map((p) => (
+              <div key={p.id} onClick={() => moАdd(p)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 6px", cursor: "pointer", borderBottom: "1px solid #eceae4" }}>
+                <span style={{ fontSize: 18 }}>{p.emoji}</span><span style={{ flex: 1, fontSize: 13.5 }}>{p.name}</span>
+                <span style={{ fontSize: 12.5, color: "#888" }}>{fmt(p.price)}</span>
+                <span style={{ background: "#1E7A46", color: "#fff", borderRadius: 7, width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800 }}>+</span>
+              </div>
+            ))}
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 14 }}>
+              <input value={manualOrder.name} onChange={(e) => setManualOrder({ ...manualOrder, name: e.target.value })} placeholder="Имя клиента" style={{ ...mi, marginTop: 0 }} />
+              <input value={manualOrder.phone} onChange={(e) => setManualOrder({ ...manualOrder, phone: e.target.value })} placeholder="Телефон" style={{ ...mi, marginTop: 0 }} />
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button onClick={() => setManualOrder({ ...manualOrder, type: "delivery" })} style={{ flex: 1, padding: 10, borderRadius: 10, border: manualOrder.type === "delivery" ? "2px solid #1E7A46" : "1.5px solid #ddd", background: manualOrder.type === "delivery" ? "#E7F4EC" : "#fff", fontWeight: 700, fontSize: 14 }}>🚚 Доставка</button>
+              <button onClick={() => setManualOrder({ ...manualOrder, type: "pickup" })} style={{ flex: 1, padding: 10, borderRadius: 10, border: manualOrder.type === "pickup" ? "2px solid #1E7A46" : "1.5px solid #ddd", background: manualOrder.type === "pickup" ? "#E7F4EC" : "#fff", fontWeight: 700, fontSize: 14 }}>🏪 Самовывоз</button>
+            </div>
+            {manualOrder.type === "delivery" && (
+              <>
+                <input value={manualOrder.address} onChange={(e) => setManualOrder({ ...manualOrder, address: e.target.value })} placeholder="Адрес доставки" style={mi} />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
+                  {zonesArr.length > 0 && (
+                    <select value={manualOrder.zone} onChange={(e) => setManualOrder({ ...manualOrder, zone: e.target.value })} style={{ ...mi, marginTop: 0 }}>
+                      {zonesArr.map((z) => <option key={z.name} value={z.name}>{z.name} · {fmt(z.fee)}</option>)}
+                    </select>
+                  )}
+                  <select value={manualOrder.slot} onChange={(e) => setManualOrder({ ...manualOrder, slot: e.target.value })} style={{ ...mi, marginTop: 0 }}>
+                    {["Ближайшее время (60–90 мин)", "Сегодня 12:00–14:00", "Сегодня 14:00–16:00", "Сегодня 16:00–18:00", "Сегодня 18:00–20:00"].map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </>
+            )}
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button onClick={() => setManualOrder({ ...manualOrder, pay: "cash" })} style={{ flex: 1, padding: 10, borderRadius: 10, border: manualOrder.pay === "cash" ? "2px solid #1E7A46" : "1.5px solid #ddd", background: manualOrder.pay === "cash" ? "#E7F4EC" : "#fff", fontWeight: 700, fontSize: 14 }}>💵 Наличные</button>
+              <button onClick={() => setManualOrder({ ...manualOrder, pay: "kaspi" })} style={{ flex: 1, padding: 10, borderRadius: 10, border: manualOrder.pay === "kaspi" ? "2px solid #1E7A46" : "1.5px solid #ddd", background: manualOrder.pay === "kaspi" ? "#E7F4EC" : "#fff", fontWeight: 700, fontSize: 14 }}>Kaspi</button>
+            </div>
+            <input value={manualOrder.comment} onChange={(e) => setManualOrder({ ...manualOrder, comment: e.target.value })} placeholder="Комментарий (необязательно)" style={mi} />
+            <button onClick={createManualOrder} style={{ ...S.btn("#1E7A46"), width: "100%", marginTop: 14, padding: 14, fontSize: 15 }}>
+              Создать заказ{manualOrder.items.length ? " · " + fmt(goods + delivery) : ""}
+            </button>
+          </div>
+          );
+        })()}
+                <input value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} placeholder="Поиск: номер заказа, телефон или имя…"
           style={{ width: "100%", padding: "13px 15px", borderRadius: 12, border: "1.5px solid #e2e0da", fontSize: 14.5, background: "#fff", marginBottom: 12 }} />
         <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
           {[["all", "За всё время"], ["today", "Сегодня"], ["7", "7 дней"]].map(([k, label]) => (
