@@ -411,6 +411,7 @@ export default function SaymanStore() {
     const res = await rpc("staff_login", { _pin: pin });
     setStaffRole(res.role);
     setStaffName(res.name || "");
+    if (res.staff) setStaffList(res.staff);
     setAdminOrders((res.orders || []).map(mapOrderRow));
     return res.role;
   };
@@ -870,14 +871,17 @@ export default function SaymanStore() {
     const adminHeader = (
       <header style={{ background: "#1B1B18", color: "#fff" }}>
         <div style={{ ...S.wrap, display: "flex", alignItems: "center", justifyContent: "space-between", height: 60, flexWrap: "wrap" }}>
-          <div style={{ fontFamily: "'Unbounded'", fontWeight: 900, fontSize: 18 }}>САЙМАН · админ</div>
+          <div style={{ fontFamily: "'Unbounded'", fontWeight: 900, fontSize: 18 }}>САЙМАН · {staffRole === "operator" ? "оператор" : "админ"} <span style={{ fontWeight: 400, fontSize: 13, opacity: 0.6 }}>{staffName}</span></div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => { setStaffAuth(false); setStaffPin(""); setStaffRole(""); setStaffName(""); setScreen("shop"); }} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>Выйти</button>
             <button onClick={() => setScreen("shop")} style={{ ...S.btn("rgba(255,255,255,.15)"), padding: "9px 14px", fontSize: 13 }}>← В магазин</button>
           </div>
         </div>
         <div style={{ ...S.wrap, display: "flex", gap: 6, paddingBottom: 12 }}>
-          {[["orders", "📦 Заказы"], ["products", "🏷️ Товары"], ["subs", "🔁 Регулярные"], ["stats", "📊 Аналитика"], ["clients", "👥 Клиенты"], ["settings", "⚙️ Настройки"]].map(([k, label]) => (
+          {(staffRole === "operator"
+              ? [["orders", "📦 Заказы"], ["team", "👥 Команда"]]
+              : [["orders", "📦 Заказы"], ["products", "🏷️ Товары"], ["subs", "🔁 Регулярные"], ["stats", "📊 Аналитика"], ["clients", "👥 Клиенты"], ["settings", "⚙️ Настройки"]]
+            ).map(([k, label]) => (
             <button key={k} onClick={() => setAdminTab(k)}
               style={{ background: adminTab === k ? "#fff" : "rgba(255,255,255,.12)", color: adminTab === k ? "#1B1B18" : "#fff", border: "none", borderRadius: 10, padding: "9px 16px", fontWeight: 800, fontSize: 13.5 }}>
               {label}
@@ -886,6 +890,101 @@ export default function SaymanStore() {
         </div>
       </header>
     );
+
+    // ── вкладка Команда (диспетчер: оператор/админ) ──
+    if (adminTab === "team") {
+      const team = staffList.filter((s) => s.active !== false);
+      const pickers = team.filter((s) => s.role === "picker");
+      const couriers = team.filter((s) => s.role === "courier");
+      // Заказы в работе по каждому сотруднику
+      const load = {};
+      adminOrders.forEach((o) => {
+        if (["new","accepted","picking","picked","delivering"].includes(o.status)) {
+          if (o.picker) { load["p:"+o.picker] = (load["p:"+o.picker]||0)+1; }
+          if (o.courier) { load["c:"+o.courier] = (load["c:"+o.courier]||0)+1; }
+        }
+      });
+      const unassignedPick = adminOrders.filter((o) => ["new","accepted"].includes(o.status) && !o.picker).length;
+      const unassignedCour = adminOrders.filter((o) => o.status === "picked" && !o.courier).length;
+      const card = { background: "#fff", borderRadius: 16, padding: 18, marginBottom: 14 };
+      const who = (role) => team.filter((s) => s.role === role);
+      return (
+        <div style={S.page}>
+          <style>{FONTS}</style>
+          {adminHeader}
+          <div style={{ ...S.wrap, maxWidth: 720, paddingTop: 20, paddingBottom: 60 }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+              <div style={{ ...card, flex: "1 1 150px", marginBottom: 0, border: unassignedPick ? "2px solid #C7411A" : "none" }}>
+                <div style={{ fontSize: 11.5, color: unassignedPick ? "#C7411A" : "#999", fontWeight: 800, textTransform: "uppercase" }}>Ждут сборки</div>
+                <div style={{ fontFamily: "'Unbounded'", fontSize: 22, fontWeight: 700, marginTop: 4, color: unassignedPick ? "#C7411A" : "#1B1B18" }}>{unassignedPick}</div>
+              </div>
+              <div style={{ ...card, flex: "1 1 150px", marginBottom: 0, border: unassignedCour ? "2px solid #1E5F7A" : "none" }}>
+                <div style={{ fontSize: 11.5, color: unassignedCour ? "#1E5F7A" : "#999", fontWeight: 800, textTransform: "uppercase" }}>Ждут курьера</div>
+                <div style={{ fontFamily: "'Unbounded'", fontSize: 22, fontWeight: 700, marginTop: 4, color: unassignedCour ? "#1E5F7A" : "#1B1B18" }}>{unassignedCour}</div>
+              </div>
+            </div>
+
+            <div style={card}>
+              <div style={{ fontWeight: 800, marginBottom: 4 }}>🧺 Сборщики на смене ({pickers.length})</div>
+              <p style={{ fontSize: 12.5, color: "#999", marginBottom: 10 }}>Число рядом — сколько заказов сейчас у сотрудника в работе</p>
+              {pickers.length === 0 && <div style={{ color: "#999", fontSize: 14 }}>Нет активных сборщиков. Добавьте их (Владелец → Настройки → Команда).</div>}
+              {pickers.map((s) => (
+                <div key={s.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f4f3ef" }}>
+                  <span style={{ fontWeight: 700, fontSize: 14.5 }}>🧺 {s.name}</span>
+                  <span style={{ background: (load["p:"+s.name]||0) > 0 ? "#FBF1E1" : "#E7F4EC", color: (load["p:"+s.name]||0) > 0 ? "#9A5E0B" : "#1E7A46", borderRadius: 99, padding: "5px 14px", fontWeight: 800, fontSize: 13 }}>
+                    {(load["p:"+s.name]||0) > 0 ? "в работе: " + load["p:"+s.name] : "свободен"}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div style={card}>
+              <div style={{ fontWeight: 800, marginBottom: 4 }}>🛵 Курьеры на смене ({couriers.length})</div>
+              {couriers.length === 0 && <div style={{ color: "#999", fontSize: 14 }}>Нет активных курьеров.</div>}
+              {couriers.map((s) => (
+                <div key={s.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f4f3ef" }}>
+                  <span style={{ fontWeight: 700, fontSize: 14.5 }}>🛵 {s.name}</span>
+                  <span style={{ background: (load["c:"+s.name]||0) > 0 ? "#E1EEF3" : "#E7F4EC", color: (load["c:"+s.name]||0) > 0 ? "#1E5F7A" : "#1E7A46", borderRadius: 99, padding: "5px 14px", fontWeight: 800, fontSize: 13 }}>
+                    {(load["c:"+s.name]||0) > 0 ? "везёт: " + load["c:"+s.name] : "свободен"}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div style={card}>
+              <div style={{ fontWeight: 800, marginBottom: 4 }}>Назначить заказы вручную</div>
+              <p style={{ fontSize: 12.5, color: "#999", marginBottom: 10 }}>Обычно сборщики и курьеры берут заказы сами. Здесь можно закрепить заказ за конкретным человеком.</p>
+              {adminOrders.filter((o) => ["new","accepted","picking","picked","delivering"].includes(o.status)).slice(0, 30).map((o) => (
+                <div key={o.id} style={{ padding: "10px 0", borderBottom: "1px solid #f4f3ef" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
+                    <span><b>{o.num}</b> <span style={{ background: STATUS[o.status].color, color: "#fff", borderRadius: 99, padding: "3px 10px", fontSize: 11.5, fontWeight: 800, marginLeft: 6 }}>{STATUS[o.status].label}</span></span>
+                    <span style={{ fontSize: 12.5, color: "#888" }}>{o.slot || o.time}{o.zone ? " · " + o.zone : ""}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ fontSize: 12.5, color: "#666" }}>🧺</span>
+                    <select value={o.picker || ""} onChange={(e) => {
+                        rpc("staff_assign", { _pin: staffPin, _id: o.id, _who: e.target.value, _kind: "picker" }).catch(dbFail);
+                        setAdminOrders(adminOrders.map((x) => x.id === o.id ? { ...x, picker: e.target.value } : x));
+                      }} style={{ padding: "7px 10px", borderRadius: 9, border: "1.5px solid #ddd", fontSize: 13, background: "#fff" }}>
+                      <option value="">— сборщик —</option>
+                      {who("picker").map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+                    </select>
+                    <span style={{ fontSize: 12.5, color: "#666" }}>🛵</span>
+                    <select value={o.courier || ""} onChange={(e) => {
+                        rpc("staff_assign", { _pin: staffPin, _id: o.id, _who: e.target.value, _kind: "courier" }).catch(dbFail);
+                        setAdminOrders(adminOrders.map((x) => x.id === o.id ? { ...x, courier: e.target.value } : x));
+                      }} style={{ padding: "7px 10px", borderRadius: 9, border: "1.5px solid #ddd", fontSize: 13, background: "#fff" }}>
+                      <option value="">— курьер —</option>
+                      {who("courier").map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     // ── вкладка Клиенты ──
     if (adminTab === "clients") {
@@ -1009,13 +1108,14 @@ export default function SaymanStore() {
 
             <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginTop: 16 }}>
               <div style={{ fontWeight: 800, fontSize: 16 }}>👥 Команда: сборщики и курьеры</div>
-              <p style={{ fontSize: 12.5, color: "#999", marginTop: 4 }}>У каждого сотрудника своё имя и PIN. Сборщик видит только свободные заказы и свои; заказ, взятый одним, закрыт для других. В карточке заказа видно, кто собрал и кто доставил.</p>
+              <p style={{ fontSize: 12.5, color: "#999", marginTop: 4 }}>У каждого сотрудника своё имя и PIN. 🧺 Сборщик — только сборка, 🛵 Курьер — только доставка, 🎧 Оператор — диспетчер: видит все заказы и команду, принимает заказы и назначает исполнителей, но без доступа к ценам, аналитике и настройкам (это только у вас).</p>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
                 <input style={{ ...inp, marginTop: 0, flex: "2 1 130px" }} placeholder="Имя" value={staffDraft.name}
                   onChange={(e) => setStaffDraft({ ...staffDraft, name: e.target.value })} />
-                <select style={{ ...inp, marginTop: 0, width: 130 }} value={staffDraft.role} onChange={(e) => setStaffDraft({ ...staffDraft, role: e.target.value })}>
+                <select style={{ ...inp, marginTop: 0, width: 145 }} value={staffDraft.role} onChange={(e) => setStaffDraft({ ...staffDraft, role: e.target.value })}>
                   <option value="picker">🧺 Сборщик</option>
                   <option value="courier">🛵 Курьер</option>
+                  <option value="operator">🎧 Оператор</option>
                 </select>
                 <input style={{ ...inp, marginTop: 0, width: 110 }} placeholder="PIN" value={staffDraft.pin}
                   onChange={(e) => setStaffDraft({ ...staffDraft, pin: e.target.value.trim() })} />
@@ -1030,7 +1130,7 @@ export default function SaymanStore() {
               </div>
               {staffList.map((s) => (
                 <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid #f4f3ef", flexWrap: "wrap", opacity: s.active ? 1 : 0.5 }}>
-                  <span style={{ fontSize: 17 }}>{s.role === "picker" ? "🧺" : "🛵"}</span>
+                  <span style={{ fontSize: 17 }}>{s.role === "picker" ? "🧺" : s.role === "courier" ? "🛵" : "🎧"}</span>
                   <b style={{ fontSize: 14.5 }}>{s.name}</b>
                   <span style={{ fontSize: 13, color: "#888" }}>PIN: {s.pin}</span>
                   <label style={{ marginLeft: "auto", fontSize: 12.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
