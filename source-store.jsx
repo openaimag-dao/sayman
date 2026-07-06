@@ -245,6 +245,21 @@ const getClientId = () => {
   } catch { return "no-storage"; }
 };
 const ORDER_FLOW = ["new", "accepted", "picking", "picked", "delivering", "done"];
+// Улицы Кайтпас-1 и Нуртаса (по постановлениям акимата Шымкента; при необходимости дополните)
+const STREETS = [
+  "мкр. Кайтпас-1, ул. Амангельды", "мкр. Кайтпас-1, ул. Алтынсарина", "мкр. Кайтпас-1, ул. А.Акбаева",
+  "мкр. Кайтпас-1, ул. Ак кайнар", "мкр. Кайтпас-1, ул. Алиева", "мкр. Кайтпас-1, ул. Алибекова",
+  "мкр. Кайтпас-1, ул. Амирбекова", "мкр. Кайтпас-1, ул. Жадыра", "мкр. Кайтпас-1, ул. Жамауова",
+  "мкр. Кайтпас-1, ул. Жас канат", "мкр. Кайтпас-1, ул. Жумабекова", "мкр. Кайтпас-1, ул. Жана курылыс",
+  "мкр. Кайтпас-1, ул. Коркем", "мкр. Кайтпас-1, ул. Кошерова", "мкр. Кайтпас-1, ул. Б.Момышулы",
+  "мкр. Кайтпас-1, ул. Наурыз", "мкр. Кайтпас-1, ул. Нурмекен", "мкр. Кайтпас-1, ул. Тузелбаева",
+  "мкр. Кайтпас-1, ул. Кахарман", "мкр. Кайтпас-1, ул. Исламкулова", "мкр. Кайтпас-1, ул. Кызылкайын",
+  "мкр. Кайтпас-1, ул. Шымыр", "мкр. Кайтпас-1, ул. Туран", "мкр. Кайтпас-1, Алматинская трасса",
+  "мкр. Кайтпас-1, ул. Жасыл желек", "мкр. Кайтпас-1, ул. Гулдала", "мкр. Кайтпас-1, ул. Саяхат",
+  "мкр. Кайтпас-1, ул. Аксункар", "мкр. Кайтпас-1, ул. Жасталап", "мкр. Кайтпас-1, ул. Кулагер",
+  "мкр. Кайтпас-1, ул. Тайбекова", "мкр. Кайтпас-1, ул. Майтобе", "мкр. Кайтпас-1, ул. Шугыла",
+  "мкр. Нуртас",
+];
 
 const supaRT = createClient(SUPA_URL, SUPA_KEY);
 const mapOrderRow = (r) => ({ ...r, time: new Date(r.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }), date: new Date(r.created_at).toLocaleDateString("ru-RU") });
@@ -314,6 +329,7 @@ export default function SaymanStore() {
   const [subDayFilter, setSubDayFilter] = useState(0);
   const [manualOrder, setManualOrder] = useState(null);
   const [manualSearch, setManualSearch] = useState("");
+  const [geoPin, setGeoPin] = useState(null);
   const [linkCode, setLinkCode] = useState("");
   const [claimInput, setClaimInput] = useState("");
   const [promoInput, setPromoInput] = useState("");
@@ -330,6 +346,17 @@ export default function SaymanStore() {
   const [lang, setLang] = useState(() => { try { return localStorage.getItem("sayman-lang") || "ru"; } catch { return "ru"; } });
   const t = (k) => (I18N[lang] && I18N[lang][k]) || I18N.ru[k] || k;
   const switchLang = () => { const n = lang === "ru" ? "kk" : "ru"; setLang(n); try { localStorage.setItem("sayman-lang", n); } catch {} };
+  // Подгрузка Leaflet (карта OpenStreetMap) один раз
+  useEffect(() => {
+    if (window.L || document.getElementById("leaflet-css")) return;
+    const css = document.createElement("link");
+    css.id = "leaflet-css"; css.rel = "stylesheet";
+    css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    document.head.appendChild(css);
+    const js = document.createElement("script");
+    js.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    document.body.appendChild(js);
+  }, []);
   const FREE_DELIVERY = settings.free_from;
   const DELIVERY_FEE = settings.delivery_fee;
 
@@ -628,6 +655,7 @@ export default function SaymanStore() {
       address: order.address, pay: order.pay, comment: order.comment,
       slot: order.type === "delivery" ? (order.slot || "") : null,
       zone: order.type === "delivery" ? curZone : null,
+      geo: order.type === "delivery" && geoPin ? geoPin.lat + "," + geoPin.lng : null,
       promo: newOrder.promo, discount: newOrder.discount,
       items: newOrder.items, total: newOrder.total, client_id: getClientId(),
     }, { Prefer: "return=minimal" }).catch(() => {});
@@ -881,7 +909,7 @@ export default function SaymanStore() {
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                   <a href={"tel:+" + String(o.phone || "").replace(/\D/g, "")} style={{ ...S.btn("#1B1B18"), flex: 1, textAlign: "center", textDecoration: "none", padding: 13 }}>📞 Позвонить</a>
-                  <a href={"https://2gis.kz/shymkent/search/" + encodeURIComponent(o.address || "")} target="_blank" rel="noreferrer" style={{ ...S.btn("#f2f1ed", "#1B1B18"), flex: 1, textAlign: "center", textDecoration: "none", padding: 13 }}>🗺️ Маршрут</a>
+                  <a href={o.geo ? "https://2gis.kz/shymkent/directions/points/|" + o.geo.split(",").reverse().join(",") : "https://2gis.kz/shymkent/search/" + encodeURIComponent(o.address || "")} target="_blank" rel="noreferrer" style={{ ...S.btn(o.geo ? "#1E7A46" : "#f2f1ed", o.geo ? "#fff" : "#1B1B18"), flex: 1, textAlign: "center", textDecoration: "none", padding: 13 }}>🗺️ {o.geo ? "Точка на карте" : "Маршрут"}</a>
                 </div>
                 <div style={{ background: "#F6F5F2", borderRadius: 12, padding: "12px 14px", marginTop: 12, display: "flex", justifyContent: "space-between", fontWeight: 800, fontSize: 16 }}>
                   <span>{o.pay === "kaspi" ? "Kaspi перевод" : "💵 Наличные"}</span>
@@ -1900,6 +1928,23 @@ export default function SaymanStore() {
     );
   };
 
+  const mapRef = useRef(null);
+  const initMap = () => {
+    if (!window.L || !mapRef.current || mapRef.current._leaflet_id) return;
+    // Центр — Кайтпас-1 / Нуртас (север Шымкента)
+    const map = window.L.map(mapRef.current).setView([42.384, 69.646], 14);
+    window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: "© OpenStreetMap",
+    }).addTo(map);
+    let marker = null;
+    map.on("click", (e) => {
+      if (marker) marker.setLatLng(e.latlng);
+      else marker = window.L.marker(e.latlng).addTo(map);
+      setGeoPin({ lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6) });
+    });
+    setTimeout(() => map.invalidateSize(), 200);
+  };
+
   // ── личный кабинет клиента ──
   if (screen === "account") {
     const inp = { width: "100%", padding: "12px 14px", borderRadius: 12, border: "1.5px solid #ddd", fontSize: 15, marginTop: 6, background: "#fff" };
@@ -2095,7 +2140,14 @@ export default function SaymanStore() {
           {order.type === "delivery" ? (
             <>
               <label style={lbl}>{t("address")}</label>
-              <input style={inp} value={order.address} onChange={(e) => setOrder({ ...order, address: e.target.value })} placeholder={lang === "kk" ? "Көше, үй, пәтер" : "Улица, дом, квартира"} />
+              <input style={inp} value={order.address} onChange={(e) => setOrder({ ...order, address: e.target.value })} placeholder={lang === "kk" ? "Көше, үй, пәтер" : "Улица, дом, квартира"} list="sayman-streets" />
+              <datalist id="sayman-streets">{STREETS.map((s) => <option key={s} value={s + ", д. "} />)}</datalist>
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 12.5, color: "#888", marginBottom: 6 }}>📍 {lang === "kk" ? "Картадан нақты жерді белгілеңіз (курьерге)" : "Отметьте точку на карте — куда подъехать курьеру"}</div>
+                <div ref={(el) => { mapRef.current = el; if (el && window.L) setTimeout(initMap, 100); }}
+                  style={{ width: "100%", height: 220, borderRadius: 12, border: "1.5px solid #ddd", overflow: "hidden", background: "#eee" }} />
+                {geoPin && <div style={{ fontSize: 12, color: "#1E7A46", fontWeight: 700, marginTop: 6 }}>✓ {lang === "kk" ? "Нүкте белгіленді" : "Точка на карте отмечена"} ({geoPin.lat}, {geoPin.lng})</div>}
+              </div>
               {zonesArr.length > 0 && (
                 <>
                   <label style={lbl}>{t("zoneL")}</label>
