@@ -115,7 +115,7 @@ const I18N = {
   ru: {
     sec_food: "Продукты", sec_build: "Стройматериалы",
     tag_food: "Свежее — каждый день", tag_build: "Всё для стройки и ремонта",
-    heroA: "Доставка по Шымкенту от 60 минут · бесплатно от ", heroB: "",
+    hero: "Доставка по Шымкенту от 60 минут · бесплатно от {sum}",
     closed1: "🌙 Магазин сейчас закрыт", closed2: "Заказ можно оформить — соберём в рабочее время.",
     searchIn: "Поиск в разделе", all: "Все",
     sort: "Сортировка:", sort_default: "По порядку", sort_promo: "🔥 Акции и хиты", sort_cheap: "Дешевле", sort_exp: "Дороже",
@@ -164,7 +164,7 @@ const I18N = {
   kk: {
     sec_food: "Азық-түлік", sec_build: "Құрылыс материалдары",
     tag_food: "Күн сайын жаңа өнімдер", tag_build: "Құрылыс пен жөндеуге барлығы",
-    heroA: "Шымкент бойынша жеткізу 60 минуттан · ", heroB: " бастап тегін",
+    hero: "Шымкент бойынша жеткізу 60 минуттан · {sum} бастап тегін",
     closed1: "🌙 Дүкен қазір жабық", closed2: "Тапсырыс беруге болады — жұмыс уақытында жинаймыз.",
     searchIn: "Іздеу бөлімі:", all: "Барлығы",
     sort: "Сұрыптау:", sort_default: "Рет бойынша", sort_promo: "🔥 Акциялар мен хиттер", sort_cheap: "Арзанырақ", sort_exp: "Қымбатырақ",
@@ -1994,7 +1994,7 @@ export default function SaymanStore() {
             ))}
           </div>
           <h1 style={{ fontFamily: "'Unbounded'", color: "#fff", fontSize: "clamp(22px, 4vw, 34px)", fontWeight: 700, marginTop: 18 }}>{t(mode === "food" ? "tag_food" : "tag_build")}</h1>
-          <p style={{ color: "rgba(255,255,255,.85)", marginTop: 6, fontSize: 15 }}>{t("heroA")}{fmt(FREE_DELIVERY)}{t("heroB")}</p>
+          <p style={{ color: "rgba(255,255,255,.85)", marginTop: 6, fontSize: 15 }}>{t("hero").replace("{sum}", fmt(FREE_DELIVERY))}</p>
           {!settings.shop_open && (
             <div style={{ background: "rgba(0,0,0,.3)", color: "#fff", borderRadius: 12, padding: "10px 14px", marginTop: 12, fontSize: 14, fontWeight: 700 }}>
               {t("closed1")} ({settings.hours}). {t("closed2")}
