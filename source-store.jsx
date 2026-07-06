@@ -1329,7 +1329,7 @@ export default function SaymanStore() {
         <div style={S.page}>
           <style>{FONTS}</style>
           {adminHeader}
-          <div style={{ ...S.wrap, maxWidth: 720, paddingTop: 20, paddingBottom: 60 }}>
+          <div style={{ ...S.wrap, maxWidth: 1000, paddingTop: 20, paddingBottom: 60 }}>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
               {[["Заказов всего", adminOrders.length], ["Выручка всего", fmt(totalSum)], ["Средний чек", fmt(avg)], ["Повторные клиенты", repeat + "%"]].map(([l, v]) => (
                 <div key={l} style={{ ...card, flex: "1 1 140px", marginBottom: 0 }}>
@@ -1431,7 +1431,7 @@ export default function SaymanStore() {
         <div style={S.page}>
           <style>{FONTS}</style>
           {adminHeader}
-          <div style={{ ...S.wrap, maxWidth: 760, paddingTop: 20, paddingBottom: 60 }}>
+          <div style={{ ...S.wrap, maxWidth: 1000, paddingTop: 20, paddingBottom: 60 }}>
             <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "center", flexWrap: "wrap" }}>
               {[["food", "🥖 Продукты"], ["build", "🧱 Стройматериалы"]].map(([k, label]) => (
                 <button key={k} onClick={() => { setAdminSection(k); setNewProd(null); }}
@@ -1577,7 +1577,7 @@ export default function SaymanStore() {
     <div style={S.page}>
       <style>{FONTS}</style>
       {adminHeader}
-      <div style={{ ...S.wrap, maxWidth: 720, paddingTop: 24, paddingBottom: 60 }}>
+      <div style={{ ...S.wrap, maxWidth: 1180, paddingTop: 24, paddingBottom: 60 }}>
         {(() => {
           const today = new Date().toLocaleDateString("ru-RU");
           const yd = new Date(); yd.setDate(yd.getDate() - 1);
@@ -1647,8 +1647,15 @@ export default function SaymanStore() {
             (orderDays === "7" && (Date.now() - new Date(o.created_at)) < 7 * 86400000)) &&
           (orderFilter === "all" || o.status === orderFilter) &&
           ((o.num || "") + " " + (o.phone || "") + " " + (o.name || "")).toLowerCase().includes(orderSearch.toLowerCase().trim())
-        ).map((o) => (
-          <div key={o.id} style={{ background: "#fff", borderRadius: 16, padding: 18, marginBottom: 14, animation: "fadeUp .3s ease" }}>
+        ).length === 0 ? <div style={{ textAlign: "center", padding: 40, color: "#999" }}>Нет заказов по этому фильтру</div> : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 14, alignItems: "start" }}>
+          {adminOrders.filter((o) =>
+            (orderDays === "all" || (orderDays === "today" && o.date === new Date().toLocaleDateString("ru-RU")) ||
+              (orderDays === "7" && (Date.now() - new Date(o.created_at)) < 7 * 86400000)) &&
+            (orderFilter === "all" || o.status === orderFilter) &&
+            ((o.num || "") + " " + (o.phone || "") + " " + (o.name || "")).toLowerCase().includes(orderSearch.toLowerCase().trim())
+          ).map((o) => (
+          <div key={o.id} style={{ background: "#fff", borderRadius: 16, padding: 18, animation: "fadeUp .3s ease" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
               <div>
                 <span style={{ fontFamily: "'Unbounded'", fontWeight: 700, fontSize: 16 }}>{o.num}</span>
@@ -1687,7 +1694,9 @@ export default function SaymanStore() {
               </div>
             </div>
           </div>
-        ))}
+          ))}
+          </div>
+        )}
       </div>
     </div>
   );
