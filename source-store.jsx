@@ -330,6 +330,7 @@ export default function SaymanStore() {
   const [manualOrder, setManualOrder] = useState(null);
   const [manualSearch, setManualSearch] = useState("");
   const [geoPin, setGeoPin] = useState(null);
+  const [isNarrow, setIsNarrow] = useState(typeof window !== "undefined" && window.innerWidth < 560);
   const [linkCode, setLinkCode] = useState("");
   const [claimInput, setClaimInput] = useState("");
   const [promoInput, setPromoInput] = useState("");
@@ -346,6 +347,11 @@ export default function SaymanStore() {
   const [lang, setLang] = useState(() => { try { return localStorage.getItem("sayman-lang") || "ru"; } catch { return "ru"; } });
   const t = (k) => (I18N[lang] && I18N[lang][k]) || I18N.ru[k] || k;
   const switchLang = () => { const n = lang === "ru" ? "kk" : "ru"; setLang(n); try { localStorage.setItem("sayman-lang", n); } catch {} };
+  useEffect(() => {
+    const onResize = () => setIsNarrow(window.innerWidth < 560);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   // Подгрузка Leaflet (карта OpenStreetMap) один раз
   useEffect(() => {
     if (window.L || document.getElementById("leaflet-css")) return;
@@ -2224,21 +2230,24 @@ export default function SaymanStore() {
 
       {/* Шапка */}
       <header style={{ background: "#1B1B18", color: "#fff", position: "sticky", top: 0, zIndex: 20 }}>
-        <div style={{ ...S.wrap, display: "flex", alignItems: "center", justifyContent: "space-between", height: 66 }}>
-          <div>
-            <div style={{ fontFamily: "'Unbounded'", fontWeight: 900, fontSize: 22, letterSpacing: 1 }}>
+        <div style={{ ...S.wrap, display: "flex", alignItems: "center", justifyContent: "space-between", height: 62, gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: "'Unbounded'", fontWeight: 900, fontSize: isNarrow ? 19 : 22, letterSpacing: 1 }}>
               САЙМАН<span style={{ color: theme.accent }}>.</span>
             </div>
-            <div style={{ fontSize: 11, opacity: 0.65 }}>Шымкент · {settings.hours}</div>
+            {!isNarrow && <div style={{ fontSize: 11, opacity: 0.65 }}>Шымкент · {settings.hours}</div>}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <a href="tel:+77755683313" style={{ color: "#fff", textDecoration: "none", fontSize: 14, fontWeight: 700, opacity: 0.9 }}>📞 +7 775 568 33 13</a>
+          <div style={{ display: "flex", alignItems: "center", gap: isNarrow ? 7 : 14, flexShrink: 0 }}>
+            <a href="tel:+77755683313" title="+7 775 568 33 13"
+              style={{ color: "#fff", textDecoration: "none", fontSize: isNarrow ? 18 : 14, fontWeight: 700, opacity: 0.9, whiteSpace: "nowrap" }}>
+              {isNarrow ? "📞" : "📞 +7 775 568 33 13"}
+            </a>
             <button onClick={switchLang} title="Тіл / Язык"
-              style={{ ...S.btn("rgba(255,255,255,.14)"), padding: "10px 12px", fontSize: 12.5, fontWeight: 800 }}>{lang === "ru" ? "ҚАЗ" : "РУС"}</button>
+              style={{ ...S.btn("rgba(255,255,255,.14)"), padding: isNarrow ? "9px 9px" : "10px 12px", fontSize: 12.5, fontWeight: 800 }}>{lang === "ru" ? "ҚАЗ" : "РУС"}</button>
             <button onClick={() => { setScreen("account"); loadMyOrders(); }} title="Мои заказы"
-              style={{ ...S.btn("rgba(255,255,255,.14)"), padding: "10px 13px", fontSize: 17 }}>👤</button>
-            <button onClick={() => setCartOpen(true)} style={{ ...S.btn(theme.accent), padding: "10px 16px", position: "relative" }}>
-              🛒 {t("cart")}
+              style={{ ...S.btn("rgba(255,255,255,.14)"), padding: isNarrow ? "9px 10px" : "10px 13px", fontSize: 17 }}>👤</button>
+            <button onClick={() => setCartOpen(true)} style={{ ...S.btn(theme.accent), padding: isNarrow ? "9px 12px" : "10px 16px", position: "relative" }}>
+              {isNarrow ? "🛒" : "🛒 " + t("cart")}
               {cartCount > 0 && (
                 <span style={{ position: "absolute", top: -8, right: -8, background: "#fff", color: theme.accentDark, borderRadius: 99, fontSize: 12, fontWeight: 800, padding: "2px 7px", border: `2px solid ${theme.accent}` }}>{cartCount}</span>
               )}
