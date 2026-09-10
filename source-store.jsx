@@ -344,6 +344,7 @@ export default function SaymanStore() {
   const [prodSearch, setProdSearch] = useState("");
   const [pinsDraft, setPinsDraft] = useState({ a: "", p: "", c: "" });
   const prevNewCount = useRef(0);
+  const mapRef = useRef(null);
   const [lang, setLang] = useState(() => { try { return localStorage.getItem("sayman-lang") || "ru"; } catch { return "ru"; } });
   const t = (k) => (I18N[lang] && I18N[lang][k]) || I18N.ru[k] || k;
   const switchLang = () => { const n = lang === "ru" ? "kk" : "ru"; setLang(n); try { localStorage.setItem("sayman-lang", n); } catch {} };
@@ -1934,7 +1935,6 @@ export default function SaymanStore() {
     );
   };
 
-  const mapRef = useRef(null);
   const initMap = () => {
     if (!window.L || !mapRef.current || mapRef.current._leaflet_id) return;
     // Центр — Кайтпас-1 / Нуртас (север Шымкента)
